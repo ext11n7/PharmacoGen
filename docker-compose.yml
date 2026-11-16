@@ -1,0 +1,8 @@
+services:
+  pharmacogen:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "8503:8503"
+    restart: unless-stopped

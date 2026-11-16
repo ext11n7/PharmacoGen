@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>PharmacoGen | исследовательская рабочая область</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="scene" aria-hidden="true"><div class="scene-grid"></div><div class="scene-beam"></div><div class="scene-noise"></div></div>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#top" aria-label="PharmacoGen">
+          <span class="brand-mark">PG</span>
+          <span><strong class="brand-wordmark" data-wordmark="PharmacoGen">PharmacoGen</strong><small data-i18n="brand_subtitle">исследовательская область</small></span>
+        </a>
+        <div class="topbar-actions">
+          <button class="icon-button" id="themeToggle" type="button" aria-label="Переключить тему" title="Переключить тему">◐</button>
+          <label class="select-wrap"><span data-i18n="language">Язык</span><select id="languageSelect"><option value="ru">Русский</option><option value="en">English</option></select></label>
+          <button class="avatar" type="button" aria-label="Профиль">K</button>
+        </div>
+      </header>
+
+      <main id="top">
+        <section class="intro-row">
+          <div class="hero-copy"><p class="eyebrow" data-i18n="eyebrow">ИССЛЕДОВАТЕЛЬСКИЙ ИНСТРУМЕНТ</p><h1 data-i18n="title">Связь препарата<br /><em>и генетического варианта.</em></h1><p class="intro-copy" data-i18n="intro">Собирайте сигналы из открытых источников и получайте прозрачный, проверяемый срез.</p></div>
+          <div class="hero-side"><div class="hero-visual" aria-label="Анимация карты связей"><canvas id="heroCanvas"></canvas><div class="hero-visual-top"><span>THREE.JS / 01</span><span class="hero-visual-dot"></span></div><div class="hero-visual-bottom"><span data-i18n="hero_visual_caption">динамическая карта сигналов</span><span class="hero-visual-coordinates">00.01 / 02.04</span></div></div><div class="intro-meta"><span class="live-dot"></span><span data-i18n="live">источники доступны</span><span class="meta-separator"></span><span>FAERS + ClinVar</span></div></div>
+        </section>
+
+        <section class="workspace-grid">
+          <aside class="query-rail">
+            <nav class="sidebar-nav" aria-label="Навигация"><div class="sidebar-brand"><span class="sidebar-brand-icon">PG</span><span>PharmacoGen</span></div><div class="sidebar-group-label" data-i18n="nav_workspace">Рабочая область</div><button class="sidebar-item active" type="button"><span>⌂</span><span data-i18n="nav_research">Исследование</span></button><button class="sidebar-item" type="button" id="navHistory"><span>◷</span><span data-i18n="nav_history">История</span></button><button class="sidebar-item" type="button" id="navSources"><span>◫</span><span data-i18n="nav_sources">Источники</span></button></nav>
+            <div class="panel-head"><div><span class="panel-index">01</span><h2 data-i18n="new_research">Новое исследование</h2></div><button class="text-button" id="clearForm" type="button" data-i18n="clear">Очистить</button></div>
+            <form id="researchForm" class="query-form">
+              <label class="field"><span data-i18n="drug">Препарат</span><input id="drugInput" name="drug" value="warfarin" autocomplete="off" placeholder="warfarin" /></label>
+              <label class="field"><span class="field-label"><span data-i18n="gene">Ген</span></span><input id="geneInput" name="gene" value="CYP2C9" autocomplete="off" placeholder="CYP2C9" /></label>
+              <label class="field"><span class="field-label"><span data-i18n="variant">Вариант / генотип</span><em data-i18n="variant_optional">необязательно</em></span><input id="variantInput" name="variant" autocomplete="off" placeholder="rs1057910 или *2/*3" /><small class="field-hint" data-i18n="variant_hint">Например: *2/*3, rs1057910</small></label>
+              <button class="primary-button" id="runButton" type="submit"><span class="button-shine"></span><span class="button-label" data-i18n="run">Собрать доказательства</span><span class="button-arrow">↗</span></button>
+            </form>
+            <div class="quick-area"><div class="micro-label" data-i18n="examples">Быстрые примеры</div><div class="quick-chips"><button class="quick-chip" data-drug="warfarin" data-gene="CYP2C9" data-variant="*2/*3" type="button">warfarin <b>×</b> CYP2C9 <small>*2/*3</small></button><button class="quick-chip" data-drug="clopidogrel" data-gene="CYP2C19" data-variant="*2" type="button">clopidogrel <b>×</b> CYP2C19 <small>*2</small></button><button class="quick-chip" data-drug="carbamazepine" data-gene="HLA-B" data-variant="*15:02" type="button">carbamazepine <b>×</b> HLA-B <small>*15:02</small></button></div></div>
+            <div class="source-list"><div class="micro-label" data-i18n="sources">Источники</div><a href="https://open.fda.gov/apis/drug/event/" target="_blank" rel="noreferrer"><span class="source-symbol">FDA</span><span><strong>openFDA FAERS</strong><small data-i18n="faers_caption">спонтанные сообщения</small></span><span class="external">↗</span></a><a href="https://www.ncbi.nlm.nih.gov/clinvar/" target="_blank" rel="noreferrer"><span class="source-symbol">NCBI</span><span><strong>ClinVar</strong><small data-i18n="clinvar_caption">интерпретация вариантов</small></span><span class="external">↗</span></a></div>
+            <div class="rail-note"><span>!</span><p data-i18n="note">Исследовательский режим. Результат не является медицинской рекомендацией.</p></div>
+          </aside>
+
+          <section class="results-panel" aria-live="polite">
+            <div class="results-top"><div><span class="panel-index">02</span><h2 data-i18n="evidence_workspace">Область доказательств</h2></div><div class="result-actions"><button class="outline-button" id="copyQuery" type="button" data-i18n="copy_query">Копировать запрос</button><button class="outline-button" id="downloadReport" type="button" data-i18n="download">Скачать отчёт</button></div></div>
+            <div id="emptyState" class="empty-state"><div class="empty-copy"><div class="empty-orbit"><span class="orbit-center">+</span><span class="orbit-ring ring-a"></span><span class="orbit-ring ring-b"></span></div><p class="empty-code" data-i18n="empty_kicker">НОВОЕ ИССЛЕДОВАНИЕ</p><h3 data-i18n="empty_title">Соберите связку<br><em>препарат + ген.</em></h3><p data-i18n="empty_text">После запуска система проверит источники, покажет найденные сигналы и соберёт прозрачный журнал доказательств.</p></div><div class="empty-dashboard"><div class="empty-dashboard-head"><div><span class="empty-dashboard-kicker" data-i18n="preview_kicker">ПРЕДПРОСМОТР ОТЧЁТА</span><strong data-i18n="preview_title">Сценарий исследования</strong></div><span class="empty-status"><i></i><span data-i18n="preview_ready">готово к запуску</span></span></div><div class="empty-dashboard-body"><div class="preview-query"><span class="preview-label" data-i18n="preview_pair">ПАРА ДЛЯ АНАЛИЗА</span><div class="preview-query-value"><span class="preview-token">warfarin</span><b>+</b><span class="preview-token">CYP2C9</span></div><small data-i18n="preview_wait">значения появятся после запуска</small></div><div class="preview-columns"><div class="preview-column"><span class="preview-column-label" data-i18n="preview_sources">ИСТОЧНИКИ</span><div class="preview-row"><span class="preview-row-mark">F</span><span><b>FAERS</b><small data-i18n="preview_faers_caption">спонтанные сообщения</small></span><i></i></div><div class="preview-row"><span class="preview-row-mark">C</span><span><b>ClinVar</b><small data-i18n="preview_clinvar_caption">генетические варианты</small></span><i></i></div></div><div class="preview-column preview-result"><span class="preview-column-label" data-i18n="preview_result">РЕЗУЛЬТАТ</span><div class="preview-signal"><span class="preview-signal-value">—</span><span><b data-i18n="preview_signal">сигнал и качество данных</b><small>•••</small></span></div><div class="preview-skeleton"><i></i><i></i><i></i></div></div></div></div><div class="empty-dashboard-foot"><span data-i18n="preview_steps">3 этапа проверки</span><div class="preview-progress"><i></i><i></i><i></i></div><span class="foot-state" data-i18n="preview_ready">готово к запуску</span></div></div></div>
+            <div id="loadingState" class="loading-state hidden"><div class="loader-line"><span></span><span></span><span></span></div><p data-i18n="loading">Агенты проверяют источники</p><small>FAERS / ClinVar / SYNTHESIS</small></div>
+            <div id="reportState" class="hidden"></div>
+          </section>
+        </section>
+
+        <section class="history-section"><div class="section-heading"><div><span class="panel-index">03</span><h2 data-i18n="recent">Последние исследования</h2></div><button class="text-button" id="clearHistory" type="button" data-i18n="clear_history">Очистить историю</button></div><div id="historyList" class="history-list"><p class="muted" data-i18n="no_history">История появится после первого запуска.</p></div></section>
+      </main>
+      <footer class="footer"><span>PharmacoGen / 2026</span><span data-i18n="footer">Открытые источники · проверяемые гипотезы</span><a href="https://ui.shadcn.com/blocks" target="_blank" rel="noreferrer">shadcn/ui ↗</a></footer>
+    </div>
+    <script src="/app.js"></script>
+    <script type="module" src="/hero-scene.js"></script>
+  </body>
+</html>

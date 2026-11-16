@@ -1,0 +1,15 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PHARMACOGEN_HOST=0.0.0.0 \
+    PHARMACOGEN_PORT=8503
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY agents.py data_sources.py web_server.py ./
+COPY web ./web
+
+EXPOSE 8503
+CMD ["python", "web_server.py"]

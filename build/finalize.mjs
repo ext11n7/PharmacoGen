@@ -1,0 +1,10 @@
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import { finalizePresentation } from "/Users/kamil/.codex/plugins/cache/openai-primary-runtime/presentations/26.1111.10930/skills/presentations/container_tools/artifact_tool_utils.mjs";
+const workspaceDir="/Users/kamil/Documents/Codex/2026-11-12/13-11-17-40-20-40";
+const skillDir="/Users/kamil/.codex/plugins/cache/openai-primary-runtime/presentations/26.1111.10930/skills/presentations";
+const candidatePath=path.join(workspaceDir,"build/candidate.pptx");
+const finalPath=path.join(workspaceDir,"outputs/PharmacoGen_presentation.pptx");
+const stagingDir=path.join(workspaceDir,"build/finalizer");
+const result=await finalizePresentation({workspaceDir,candidatePath,finalPath,pythonExecutable:"/Users/kamil/.cache/codex-runtimes/codex-primary-runtime/dependencies/python/bin/python3",integrityValidatorPath:path.join(skillDir,"container_tools/inspect_presentation_package_integrity.py"),layoutValidatorPath:path.join(skillDir,"container_tools/inspect_presentation_layout_geometry.py"),layoutArgs:["--expected-slide-size-emu","12192000,6858000","--validate-bullet-geometry","--validate-heading-fit"],fontPolicy:{basis:"design",families:["Arial"]},verifyArtifactToolImport:true,receiptPath:path.join(stagingDir,"validation.json")});
+console.log(JSON.stringify(result));

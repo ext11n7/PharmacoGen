@@ -1,0 +1,13 @@
+[build]
+  publish = "web"
+  functions = "netlify/functions"
+
+[[redirects]]
+  from = "/api/investigate"
+  to = "/.netlify/functions/investigate"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
