@@ -361,3 +361,69 @@ h1 { max-width: 850px; margin-bottom: 22px; font-size: clamp(3.3rem, 5.8vw, 6.35
   .section-heading { align-items: flex-start; flex-direction: column; }
   .mcp-live-state { align-self: flex-start; }
 }
+
+/* Structured evidence route and contextual MCP guidance. */
+.report-network { margin-top: 24px; border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px 20px; background: var(--surface-soft); }
+.network-map-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
+.network-map-kicker { display: block; color: var(--quiet); font-size: 10px; font-weight: 850; letter-spacing: .16em; }
+.network-map-head h4 { margin: 8px 0 0; color: var(--text); font-size: 20px; letter-spacing: -.03em; }
+.network-map-head p { margin: 7px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.network-map-status { display: inline-flex; align-items: center; gap: 7px; flex: 0 0 auto; border: 1px solid var(--line-strong); border-radius: 999px; padding: 7px 10px; color: var(--muted); font-size: 10px; white-space: nowrap; }
+.network-map-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgba(127,127,135,.12); }
+.network-query-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(150px, .55fr) minmax(0, 1fr); align-items: center; gap: 14px; margin-top: 24px; }
+.network-entity { border-color: var(--line-strong); border-radius: 11px; padding: 15px 16px; background: var(--surface-solid); }
+.network-entity span:last-child { min-width: 0; }
+.network-entity small { margin: 0 0 6px; color: var(--quiet); font-size: 9px; font-weight: 850; letter-spacing: .12em; }
+.network-entity b { font-size: 15px; }
+.network-glyph { width: 36px; height: 36px; border-radius: 9px; font-size: 11px; }
+.network-link { display: flex; align-items: center; gap: 8px; color: var(--quiet); font-size: 10px; text-align: center; }
+.network-link i { display: block; height: 1px; flex: 1; background: var(--line-strong); }
+.network-link span { white-space: nowrap; }
+.network-downlink { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; margin: 19px 20px 15px; color: var(--quiet); font-size: 10px; text-align: center; }
+.network-downlink::before, .network-downlink::after { content: ""; height: 1px; background: var(--line); }
+.network-downlink span { display: none; }
+.network-downlink b { color: var(--muted); font-size: 10px; font-weight: 700; }
+.network-source-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 0; }
+.network-source-tile { border: 1px solid var(--line); border-radius: 11px; padding: 15px; background: var(--surface-solid); }
+.network-source-main { gap: 11px; }
+.network-source-main .network-glyph { width: 32px; height: 32px; font-size: 10px; }
+.network-source-main b { font-size: 13px; }
+.network-source-main small { margin-top: 4px; font-size: 11px; }
+.network-source-main em { display: block; margin-top: 6px; color: var(--quiet); font-size: 10px; font-style: normal; }
+.source-state { font-size: 10px; }
+.network-map-foot { display: flex; align-items: center; gap: 9px; margin-top: 15px; border-top: 1px solid var(--line); padding-top: 14px; color: var(--muted); font-size: 11px; }
+.network-foot-mark { display: grid; place-items: center; flex: 0 0 auto; width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--button-text); font-size: 11px; font-weight: 850; }
+
+.mcp-source-guide { display: grid; grid-template-columns: 46px minmax(0, 1.2fr) minmax(220px, .8fr) auto; align-items: center; gap: 16px; margin-top: 20px; border: 1px solid var(--line); border-radius: 12px; padding: 18px 20px; background: var(--surface-soft); }
+.mcp-guide-index { display: grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--line-strong); border-radius: 10px; color: var(--text); font: 12px ui-monospace, monospace; }
+.mcp-guide-copy, .mcp-guide-when { min-width: 0; }
+.mcp-guide-copy > span, .mcp-guide-when > span, .mcp-tool-help > span { display: block; color: var(--quiet); font-size: 9px; font-weight: 850; letter-spacing: .13em; }
+.mcp-guide-copy strong { display: block; margin-top: 6px; color: var(--text); font-size: 14px; }
+.mcp-guide-copy p { margin: 6px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
+.mcp-guide-when { border-left: 1px solid var(--line); padding-left: 16px; }
+.mcp-guide-when strong { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+.mcp-guide-steps { display: flex; align-items: center; gap: 7px; color: var(--quiet); font-size: 10px; white-space: nowrap; }
+.mcp-guide-steps i { display: grid; place-items: center; width: 21px; height: 21px; border: 1px solid var(--line-strong); border-radius: 50%; color: var(--text); font-style: normal; font-size: 9px; }
+.mcp-tool-description { min-height: 0; }
+.mcp-tool-help { margin-top: 17px; border-top: 1px solid var(--line); padding-top: 15px; }
+.mcp-tool-help p { margin: 7px 0 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.mcp-tool-help b { color: var(--text); font-weight: 700; }
+
+@media (max-width: 900px) {
+  .mcp-source-guide { grid-template-columns: 46px 1fr 1fr; }
+  .mcp-guide-steps { grid-column: 2 / -1; }
+}
+
+@media (max-width: 580px) {
+  .report-network { padding: 19px 17px 17px; }
+  .network-map-head { flex-direction: column; gap: 12px; }
+  .network-map-head h4 { font-size: 18px; }
+  .network-query-row { grid-template-columns: 1fr; gap: 10px; margin-top: 18px; }
+  .network-link { justify-content: center; }
+  .network-downlink { margin: 14px 0 12px; }
+  .network-source-grid { grid-template-columns: 1fr; }
+  .mcp-source-guide { grid-template-columns: 40px 1fr; gap: 13px; padding: 16px; }
+  .mcp-guide-index { width: 36px; height: 36px; }
+  .mcp-guide-when { grid-column: 1 / -1; border-top: 1px solid var(--line); border-left: 0; padding: 13px 0 0; }
+  .mcp-guide-steps { grid-column: 1 / -1; flex-wrap: wrap; }
+}

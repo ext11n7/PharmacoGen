@@ -38,8 +38,21 @@ function reactionChart(rows) {
   return `<div class="chart-block"><div class="chart-block-head"><div><div class="subheading">${t('reaction_chart')}</div><div class="chart-caption">FAERS</div></div><span class="chart-total">${visibleRows.length} ${t('records')}</span></div><div class="bar-chart">${visibleRows.map((row) => `<div class="bar-item" title="${esc(row.term)}"><span class="bar-value">${esc(row.count)}</span><i style="height:${Math.max(12, Math.round((Number(row.count) || 0) / max * 100))}%"></i><small>${esc(row.term)}</small></div>`).join('')}</div></div>`;
 }
 function relationNetwork(report, faersStatus, clinvarStatus, sourceState) {
-  const sourceTile = (kind, title, isAvailable) => `<article class="network-source-tile"><div class="network-source-main"><span class="network-glyph">${kind === 'FAERS' ? 'F' : 'C'}</span><div><b>${kind}</b><small>${esc(title)}</small></div></div>${sourceState(isAvailable)}</article>`;
-  return `<div class="report-network"><div class="network-route"><div class="network-entity network-drug"><span class="network-glyph">D</span><span><b>${esc(report.normalized_query.drug)}</b><small>${state.lang === 'ru' ? 'препарат' : 'drug'}</small></span></div><span class="route-arrow" aria-hidden="true">→</span><div class="network-route-core"><span>${t('route_title')}</span><strong>FAERS + ClinVar</strong><small>${t('route_caption')}</small></div><span class="route-arrow" aria-hidden="true">→</span><div class="network-entity network-gene"><span class="network-glyph">G</span><span><b>${esc(report.normalized_query.gene)}</b><small>${state.lang === 'ru' ? 'ген' : 'gene'}</small></span></div></div><div class="network-source-grid">${sourceTile('FAERS', t('faers'), faersStatus)}${sourceTile('ClinVar', t('clinvar'), clinvarStatus)}</div></div>`;
+  const sourceTile = (kind, title, caption, isAvailable) => `<article class="network-source-tile"><div class="network-source-main"><span class="network-glyph">${kind === 'FAERS' ? 'F' : 'C'}</span><div><b>${kind}</b><small>${esc(title)}</small><em>${esc(caption)}</em></div></div>${sourceState(isAvailable)}</article>`;
+  return `<section class="report-network" aria-label="${esc(t('route_title'))}">
+    <div class="network-map-head"><div><span class="network-map-kicker">${esc(t('route_title'))}</span><h4>${state.lang === 'ru' ? 'Маршрут проверки' : 'Verification route'}</h4><p>${state.lang === 'ru' ? 'Сначала фиксируем пару, затем сверяем два независимых источника.' : 'First fix the pair, then compare two independent sources.'}</p></div><span class="network-map-status"><i></i>${state.lang === 'ru' ? 'схема активна' : 'route active'}</span></div>
+    <div class="network-query-row">
+      <div class="network-entity network-drug"><span class="network-glyph">D</span><span><small>${state.lang === 'ru' ? 'ПРЕПАРАТ' : 'DRUG'}</small><b>${esc(report.normalized_query.drug)}</b></span></div>
+      <div class="network-link"><i></i><span>${state.lang === 'ru' ? 'связка запроса' : 'query pair'}</span><i></i></div>
+      <div class="network-entity network-gene"><span class="network-glyph">G</span><span><small>${state.lang === 'ru' ? 'ГЕН' : 'GENE'}</small><b>${esc(report.normalized_query.gene)}</b></span></div>
+    </div>
+    <div class="network-downlink"><span></span><b>${state.lang === 'ru' ? 'проверка источников' : 'source check'}</b><span></span></div>
+    <div class="network-source-grid">
+      ${sourceTile('FAERS', t('faers'), state.lang === 'ru' ? 'спонтанные сообщения' : 'spontaneous reports', faersStatus)}
+      ${sourceTile('ClinVar', t('clinvar'), state.lang === 'ru' ? 'интерпретация вариантов' : 'variant interpretation', clinvarStatus)}
+    </div>
+    <div class="network-map-foot"><span class="network-foot-mark">✓</span><span>${state.lang === 'ru' ? 'Результаты источников объединены в журнале доказательств ниже.' : 'Source results are combined in the evidence journal below.'}</span></div>
+  </section>`;
 }
 function variantPanel(report) {
   const variant = report.normalized_query?.variant || '';
@@ -90,15 +103,46 @@ function renderHistory() { const history = JSON.parse(localStorage.getItem('pg-h
 function downloadReport() { if (!state.report) { toast(t('empty_input')); return; } const blob = new Blob([JSON.stringify(state.report, null, 2)], { type:'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'pharmacogen-report.json'; link.click(); URL.revokeObjectURL(link.href); }
 
 const mcpState = { catalog: null, source: 'stdio', tools: [], selected: null };
+const mcpSourceGuides = {
+  stdio: { index: '01', title: 'Локальный stdio', text: 'Приложение запускает отдельный Python-процесс и обменивается с ним сообщениями MCP через stdin и stdout.', when: 'Для быстрых локальных расчётов и демонстрации протокола.' },
+  network: { index: '02', title: 'Локальный сетевой', text: 'Клиент обращается к отдельному MCP-серверу по Streamable HTTP. Сервер можно запускать независимо от веб-интерфейса.', when: 'Для проверки сетевого сценария и нескольких клиентов.' },
+  external: { index: '03', title: 'Внешний medical-mcp', text: 'Клиент подключается к опубликованному медицинскому MCP из Glama и запрашивает данные внешних баз.', when: 'Для поиска литературы и сведений о препаратах из внешнего источника.' },
+};
+const mcpToolGuides = {
+  calculate_bmi_tool: { what: 'Рассчитывает индекс массы тела по массе и росту.', result: 'Показывает числовое значение, диапазон и краткую интерпретацию.' },
+  calculate_ckd_epi_tool: { what: 'Оценивает скорость клубочковой фильтрации по CKD-EPI 2021.', result: 'Возвращает расчётную СКФ и категорию диапазона.' },
+  calculate_chadsvasc_tool: { what: 'Считает баллы CHA₂DS₂-VASc по факторам риска.', result: 'Показывает сумму баллов и пояснение для учебного сценария.' },
+  calculate_gcs_tool: { what: 'Суммирует три компонента шкалы комы Глазго.', result: 'Возвращает итоговую оценку и её диапазон.' },
+  calculate_qsofa_tool: { what: 'Считает баллы qSOFA по частоте дыхания, давлению и сознанию.', result: 'Показывает сумму и уровень настороженности.' },
+  calculate_map_tool: { what: 'Рассчитывает среднее артериальное давление.', result: 'Возвращает значение в мм рт. ст. и категорию.' },
+  'search-medical-literature': { what: 'Ищет публикации по препарату, гену или клиническому вопросу.', result: 'Возвращает найденные статьи и сведения для дальнейшей проверки.' },
+  'get-drug-details': { what: 'Запрашивает сведения о препарате из внешнего медицинского источника.', result: 'Возвращает найденные записи и основные характеристики.' },
+};
 function mcpToolsForSource() { return mcpState.source === 'external' ? (mcpState.catalog?.external_tools || []) : (mcpState.catalog?.local_tools || []); }
 function mcpSchema(tool) { return tool?.inputSchema || tool?.input_schema || { type: 'object', properties: {} }; }
 function mcpProperties(tool) { return mcpSchema(tool).properties || {}; }
 function mcpLabel(name) { return name.replace(/_tool$/, '').replaceAll('_', ' '); }
+function mcpFieldLabel(name) {
+  const labels = { weight_kg: 'Масса тела', height_cm: 'Рост', creatinine_mg_dl: 'Креатинин', age: 'Возраст', sex: 'Пол', congestive_heart_failure: 'Сердечная недостаточность', hypertension: 'Артериальная гипертензия', diabetes: 'Сахарный диабет', stroke_history: 'Инсульт в анамнезе', vascular_disease: 'Сосудистое заболевание', respiratory_rate: 'Частота дыхания', systolic_bp: 'Систолическое давление', gcs_eye: 'Открывание глаз', gcs_verbal: 'Речевая реакция', gcs_motor: 'Двигательная реакция', diastolic_bp: 'Диастолическое давление', query: 'Поисковый запрос', max_results: 'Максимум результатов', drug_name: 'Название препарата' };
+  return labels[name] || name.replaceAll('_', ' ');
+}
+function renderMcpGuide() {
+  const guide = mcpSourceGuides[mcpState.source] || mcpSourceGuides.stdio;
+  $('#mcpGuideIndex').textContent = guide.index;
+  $('#mcpGuideTitle').textContent = guide.title;
+  $('#mcpGuideText').textContent = guide.text;
+  $('#mcpGuideWhen').textContent = guide.when;
+}
+function renderMcpToolHelp() {
+  const selected = mcpState.selected;
+  const guide = mcpToolGuides[selected?.name] || { what: selected?.description || 'Инструмент принимает параметры формы и передаёт их выбранному MCP-серверу.', result: 'Ответ появится справа и будет доступен в инспекторе JSON-RPC.' };
+  $('#mcpToolHelp').innerHTML = `<span>ПОЯСНЕНИЕ</span><p><b>Что делает:</b> ${esc(guide.what)}</p><p><b>На выходе:</b> ${esc(guide.result)}</p>`;
+}
 function renderMcpFields() {
   const properties = mcpProperties(mcpState.selected);
   const fields = Object.entries(properties);
   $('#mcpFormFields').innerHTML = fields.length ? fields.map(([name, schema]) => {
-    const label = name.replaceAll('_', ' ');
+    const label = mcpFieldLabel(name);
     const type = schema.type || 'string';
     if (type === 'boolean') return `<label class="mcp-checkbox"><input data-mcp-field="${esc(name)}" type="checkbox" ${schema.default ? 'checked' : ''} /><span>${esc(label)}</span></label>`;
     if (type === 'enum' || schema.enum) return `<label class="mcp-field"><span>${esc(label)} <small>${esc(schema.unit || '')}</small></span><select data-mcp-field="${esc(name)}">${(schema.enum || schema.values || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join('')}</select></label>`;
@@ -118,6 +162,8 @@ function renderMcpTools() {
   if (mcpState.selected) $('#mcpToolSelect').value = mcpState.selected.name;
   $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.';
   renderMcpFields();
+  renderMcpGuide();
+  renderMcpToolHelp();
 }
 async function loadMcpCatalog() {
   try {
@@ -192,7 +238,7 @@ $('#navSources').addEventListener('click', () => $('.source-list').scrollIntoVie
 document.querySelectorAll('.quick-chip').forEach((chip) => chip.addEventListener('click', () => { $('#drugInput').value = chip.dataset.drug; $('#geneInput').value = chip.dataset.gene; $('#variantInput').value = chip.dataset.variant || ''; runInvestigation(); }));
 document.querySelectorAll('input[name="mcpSource"]').forEach((input) => input.addEventListener('change', () => selectMcpSource(input.value)));
 $('#mcpToolSearch').addEventListener('input', renderMcpTools);
-$('#mcpToolSelect').addEventListener('change', (event) => { mcpState.selected = mcpState.tools.find((tool) => tool.name === event.target.value) || null; $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.'; renderMcpFields(); });
+$('#mcpToolSelect').addEventListener('change', (event) => { mcpState.selected = mcpState.tools.find((tool) => tool.name === event.target.value) || null; $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.'; renderMcpFields(); renderMcpToolHelp(); });
 $('#mcpToolForm').addEventListener('submit', callMcpTool);
 applyTheme(); applyLanguage(); bindGlare(); setLoading(false);
 loadMcpCatalog();

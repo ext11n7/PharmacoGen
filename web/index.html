@@ -59,8 +59,14 @@
             <label class="mcp-source-card"><input type="radio" name="mcpSource" value="network" /><span class="mcp-source-number">02</span><strong>Локальный сетевой</strong><small>Streamable HTTP · порт 8000</small></label>
             <label class="mcp-source-card"><input type="radio" name="mcpSource" value="external" /><span class="mcp-source-number">03</span><strong>Внешний medical-mcp</strong><small>Glama · FDA · PubMed · RxNorm</small></label>
           </div>
+          <div class="mcp-source-guide" id="mcpSourceGuide" aria-live="polite">
+            <div class="mcp-guide-index" id="mcpGuideIndex">01</div>
+            <div class="mcp-guide-copy"><span>КАК ЭТО РАБОТАЕТ</span><strong id="mcpGuideTitle">Локальный stdio</strong><p id="mcpGuideText">Приложение запускает отдельный Python-процесс и обменивается с ним сообщениями MCP через stdin и stdout.</p></div>
+            <div class="mcp-guide-when"><span>КОГДА ИСПОЛЬЗОВАТЬ</span><strong id="mcpGuideWhen">Для быстрых локальных расчётов и демонстрации протокола.</strong></div>
+            <div class="mcp-guide-steps"><i>1</i><span>запуск</span><i>2</i><span>список инструментов</span><i>3</i><span>вызов</span></div>
+          </div>
           <div class="mcp-workbench">
-            <div class="mcp-tool-picker"><div class="mcp-picker-head"><span class="micro-label">Инструменты</span><span id="mcpToolCount" class="mcp-tool-count">загрузка…</span></div><input id="mcpToolSearch" class="mcp-search" type="search" placeholder="Поиск по названию или разделу" /><select id="mcpToolSelect" class="mcp-tool-select" aria-label="Выберите MCP-инструмент"></select><p id="mcpToolDescription" class="mcp-tool-description">Выберите источник и инструмент.</p></div>
+            <div class="mcp-tool-picker"><div class="mcp-picker-head"><span class="micro-label">Инструменты</span><span id="mcpToolCount" class="mcp-tool-count">загрузка…</span></div><input id="mcpToolSearch" class="mcp-search" type="search" placeholder="Поиск по названию или разделу" /><select id="mcpToolSelect" class="mcp-tool-select" aria-label="Выберите MCP-инструмент"></select><div id="mcpToolDescription" class="mcp-tool-description">Выберите источник и инструмент.</div><div id="mcpToolHelp" class="mcp-tool-help"><span>ПОЯСНЕНИЕ</span><p>После выбора инструмента здесь появится его назначение и ожидаемый результат.</p></div></div>
             <form id="mcpToolForm" class="mcp-dynamic-form"><div class="micro-label">Параметры вызова</div><div id="mcpFormFields" class="mcp-form-fields"></div><button class="primary-button" id="mcpRunButton" type="submit"><span class="button-shine"></span><span class="button-label">Вызвать через MCP</span><span class="button-arrow">↗</span></button></form>
             <div id="mcpToolResult" class="mcp-tool-result"><div class="mcp-result-empty"><span>+</span><p>Результат появится после вызова инструмента</p></div></div>
           </div>
