@@ -6,6 +6,7 @@ from typing import Any
 import streamlit as st
 
 from agents import run_investigation
+from mcp_clients.router import MCPClientError, call_mcp_tool, list_mcp_catalog
 
 
 st.set_page_config(page_title="PharmacoGen | обзор доказательств", page_icon="PG", layout="wide", initial_sidebar_state="collapsed")
@@ -202,5 +203,70 @@ with main:
             for limitation in tr("limitations"): st.markdown(f'<div class="pg-limit">{limitation}</div>', unsafe_allow_html=True)
             st.caption(f"{tr('generated')}: {report.generated_at[:19].replace('T',' ')} UTC")
         st.download_button(tr("download"), data=json.dumps(report.to_dict(), ensure_ascii=False, indent=2), file_name="pharmacogen_report.json", mime="application/json", width="content")
+
+
+st.markdown("## MCP-лаборатория")
+st.caption("Три транспорта MCP, динамическая форма инструментов и инспектор JSON-RPC")
+try:
+    mcp_catalog = list_mcp_catalog()
+    source_options = {item["title"]: item["id"] for item in mcp_catalog["sources"]}
+    source_title = st.selectbox("Источник MCP", list(source_options), key="mcp_source_select")
+    source_id = source_options[source_title]
+    available_tools = mcp_catalog["external_tools"] if source_id == "external" else mcp_catalog["local_tools"]
+    search_text = st.text_input("Поиск инструмента", placeholder="Например, нефрология или CKD", key="mcp_tool_search")
+    search_lower = search_text.casefold().strip()
+    filtered_tools = [tool for tool in available_tools if not search_lower or search_lower in f"{tool.get('title', '')} {tool.get('name', '')} {tool.get('category', '')}".casefold()]
+    if not filtered_tools:
+        st.warning("Инструменты по этому запросу не найдены.")
+    else:
+        tool_labels = {f"{tool.get('title', tool['name'])} · {tool.get('category', '')}": tool for tool in filtered_tools}
+        selected_label = st.selectbox("Инструмент", list(tool_labels), key="mcp_tool_select")
+        selected_tool = tool_labels[selected_label]
+        st.caption(f"`{selected_tool['name']}` · источник методики: {selected_tool.get('source', 'MCP')}")
+        schema = selected_tool.get("inputSchema", {})
+        properties = schema.get("properties", {})
+        with st.form("mcp_tool_form", clear_on_submit=False):
+            arguments: dict[str, Any] = {}
+            for name, definition in properties.items():
+                label = name.replace("_", " ")
+                field_type = definition.get("type", "string")
+                if field_type == "boolean":
+                    arguments[name] = st.checkbox(label, value=bool(definition.get("default", False)))
+                elif field_type in {"integer", "number"}:
+                    minimum = definition.get("min", definition.get("minimum", 0))
+                    maximum = definition.get("max", definition.get("maximum", 100))
+                    default = definition.get("default", minimum)
+                    arguments[name] = st.number_input(label, min_value=float(minimum), max_value=float(maximum), value=float(default), step=1.0 if field_type == "integer" else 0.1)
+                    if field_type == "integer":
+                        arguments[name] = int(arguments[name])
+                elif definition.get("enum") or definition.get("values"):
+                    values = definition.get("enum") or definition.get("values")
+                    arguments[name] = st.selectbox(label, values)
+                else:
+                    arguments[name] = st.text_input(label, value=str(definition.get("default", "")))
+            mcp_submit = st.form_submit_button("Вызвать через MCP", width="stretch")
+        if mcp_submit:
+            with st.spinner("MCP-сервер обрабатывает tools/call…"):
+                try:
+                    st.session_state.mcp_result = call_mcp_tool(source_id, selected_tool["name"], arguments)
+                except MCPClientError as exc:
+                    st.session_state.mcp_result = {"error": str(exc)}
+                except Exception as exc:
+                    st.session_state.mcp_result = {"error": f"Непредвиденная ошибка MCP: {exc}"}
+        mcp_result = st.session_state.get("mcp_result")
+        if mcp_result:
+            if mcp_result.get("error"):
+                st.error(mcp_result["error"])
+            else:
+                result_payload = mcp_result.get("result", {})
+                st.markdown("### Результат инструмента")
+                st.json(result_payload)
+                with st.expander("Инспектор JSON-RPC", expanded=True):
+                    st.markdown("**Трасса `initialize` → `tools/list` → `tools/call`**")
+                    st.json(mcp_result.get("trace", []))
+                    st.markdown("**Схема выбранного инструмента**")
+                    st.json(mcp_result.get("tool", {}))
+except Exception as exc:
+    st.error(f"Каталог MCP недоступен: {exc}")
 
 st.markdown(f'<div class="pg-footer">{tr("about")}: {tr("about_text")} · openFDA FAERS · NCBI ClinVar</div>', unsafe_allow_html=True)

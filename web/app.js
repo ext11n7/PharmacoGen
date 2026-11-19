@@ -89,6 +89,97 @@ function saveHistory(item) { const history = JSON.parse(localStorage.getItem('pg
 function renderHistory() { const history = JSON.parse(localStorage.getItem('pg-history') || '[]'); $('#historyList').innerHTML = history.length ? history.map((item) => `<div class="history-item"><button data-history="${esc(item.drug)}|${esc(item.gene)}|${esc(item.variant || '')}" type="button"><strong>${esc(item.drug)} × ${esc(item.gene)}${item.variant ? ` × ${esc(item.variant)}` : ''}</strong><small>${new Date(item.date).toLocaleDateString(state.lang === 'ru' ? 'ru-RU' : 'en-US')}</small></button><span class="external">↗</span></div>`).join('') : `<p class="muted">${t('no_history')}</p>`; $('#historyList').querySelectorAll('[data-history]').forEach((button) => button.addEventListener('click', () => { const [drug, gene, variant = ''] = button.dataset.history.split('|'); $('#drugInput').value = drug; $('#geneInput').value = gene; $('#variantInput').value = variant; runInvestigation(); })); }
 function downloadReport() { if (!state.report) { toast(t('empty_input')); return; } const blob = new Blob([JSON.stringify(state.report, null, 2)], { type:'application/json' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = 'pharmacogen-report.json'; link.click(); URL.revokeObjectURL(link.href); }
 
+const mcpState = { catalog: null, source: 'stdio', tools: [], selected: null };
+function mcpToolsForSource() { return mcpState.source === 'external' ? (mcpState.catalog?.external_tools || []) : (mcpState.catalog?.local_tools || []); }
+function mcpSchema(tool) { return tool?.inputSchema || tool?.input_schema || { type: 'object', properties: {} }; }
+function mcpProperties(tool) { return mcpSchema(tool).properties || {}; }
+function mcpLabel(name) { return name.replace(/_tool$/, '').replaceAll('_', ' '); }
+function renderMcpFields() {
+  const properties = mcpProperties(mcpState.selected);
+  const fields = Object.entries(properties);
+  $('#mcpFormFields').innerHTML = fields.length ? fields.map(([name, schema]) => {
+    const label = name.replaceAll('_', ' ');
+    const type = schema.type || 'string';
+    if (type === 'boolean') return `<label class="mcp-checkbox"><input data-mcp-field="${esc(name)}" type="checkbox" ${schema.default ? 'checked' : ''} /><span>${esc(label)}</span></label>`;
+    if (type === 'enum' || schema.enum) return `<label class="mcp-field"><span>${esc(label)} <small>${esc(schema.unit || '')}</small></span><select data-mcp-field="${esc(name)}">${(schema.enum || schema.values || []).map((value) => `<option value="${esc(value)}">${esc(value)}</option>`).join('')}</select></label>`;
+    const numeric = type === 'number' || type === 'integer';
+    const step = type === 'integer' ? '1' : '0.1';
+    const attrs = [`type="number"`, `step="${step}"`, schema.min !== undefined ? `min="${schema.min}"` : '', schema.max !== undefined ? `max="${schema.max}"` : '', schema.default !== undefined ? `value="${schema.default}"` : ''].filter(Boolean).join(' ');
+    return `<label class="mcp-field"><span>${esc(label)} <small>${esc(schema.unit || '')}</small></span><input data-mcp-field="${esc(name)}" ${numeric ? attrs : 'type="text"'} placeholder="${esc(schema.description || '')}" /></label>`;
+  }).join('') : '<p class="muted">У этого инструмента нет параметров.</p>';
+}
+function renderMcpTools() {
+  const query = ($('#mcpToolSearch').value || '').trim().toLowerCase();
+  mcpState.tools = mcpToolsForSource().filter((tool) => `${tool.title || ''} ${tool.name || ''} ${tool.category || ''}`.toLowerCase().includes(query));
+  $('#mcpToolCount').textContent = `${mcpState.tools.length} инструментов`;
+  $('#mcpToolSelect').innerHTML = mcpState.tools.map((tool) => `<option value="${esc(tool.name)}">${esc(tool.title || mcpLabel(tool.name))} · ${esc(tool.category || '')}</option>`).join('') || '<option value="">Нет совпадений</option>';
+  const selectedName = mcpState.selected?.name;
+  mcpState.selected = mcpState.tools.find((tool) => tool.name === selectedName) || mcpState.tools[0] || null;
+  if (mcpState.selected) $('#mcpToolSelect').value = mcpState.selected.name;
+  $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.';
+  renderMcpFields();
+}
+async function loadMcpCatalog() {
+  try {
+    const response = await fetch('/api/mcp/catalog');
+    mcpState.catalog = await response.json();
+    renderMcpTools();
+  } catch (error) {
+    $('#mcpToolDescription').textContent = `Не удалось загрузить каталог: ${error.message}`;
+  }
+}
+function mcpArguments() {
+  const result = {};
+  document.querySelectorAll('[data-mcp-field]').forEach((field) => {
+    const schema = mcpProperties(mcpState.selected)[field.dataset.mcpField] || {};
+    if (field.type === 'checkbox') result[field.dataset.mcpField] = field.checked;
+    else if (schema.type === 'number') result[field.dataset.mcpField] = Number(field.value);
+    else if (schema.type === 'integer') result[field.dataset.mcpField] = Number.parseInt(field.value, 10);
+    else result[field.dataset.mcpField] = field.value;
+  });
+  return result;
+}
+function extractMcpValue(data) {
+  const result = data?.result || {};
+  if (result.structuredContent) return result.structuredContent;
+  const content = result.content || [];
+  const textBlock = content.find((item) => item.type === 'text' && item.text);
+  if (textBlock) { try { return JSON.parse(textBlock.text); } catch { return { text: textBlock.text }; } }
+  return result;
+}
+function renderMcpResult(data) {
+  const value = extractMcpValue(data);
+  const result = value?.result || value;
+  const first = result?.value !== undefined ? result : null;
+  $('#mcpToolResult').innerHTML = `<div class="mcp-result-head"><div><strong>${esc(data.tool?.name || mcpState.selected?.name || 'MCP')}</strong><small>${esc(data.source)}${data.cache_hit ? ' · кэш' : ' · свежий вызов'}</small></div><span class="mcp-cache">${data.cache_hit ? 'HIT' : 'MISS'}</span></div>${first ? `<div class="mcp-result-value">${esc(first.value)} <small>${esc(first.unit || '')}</small></div><span class="mcp-result-category ${esc(first.risk_color || 'yellow')}">${esc(first.category || 'результат')}</span><p class="mcp-result-copy">${esc(first.interpretation || '')}</p><p class="mcp-result-copy">${Object.entries(first.components || {}).map(([key, item]) => `${esc(key)}: ${esc(item)}`).join(' · ')}</p>` : `<p class="mcp-result-copy">${esc(JSON.stringify(result, null, 2))}</p>`}`;
+  $('#mcpTrace code').textContent = JSON.stringify(data.trace || [], null, 2);
+  $('#mcpRawResult code').textContent = JSON.stringify(data, null, 2);
+}
+async function callMcpTool(event) {
+  event.preventDefault();
+  if (!mcpState.selected) { toast('Выберите инструмент'); return; }
+  const button = $('#mcpRunButton');
+  button.disabled = true;
+  button.querySelector('.button-label').textContent = 'Вызов MCP…';
+  try {
+    const response = await fetch('/api/mcp/call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ source:mcpState.source, tool:mcpState.selected.name, arguments:mcpArguments() }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'MCP вернул ошибку');
+    renderMcpResult(data);
+    document.querySelector('.mcp-inspector').open = true;
+  } catch (error) {
+    $('#mcpToolResult').innerHTML = `<p class="mcp-result-copy">Ошибка MCP: ${esc(error.message)}</p>`;
+  } finally {
+    button.disabled = false;
+    button.querySelector('.button-label').textContent = 'Вызвать через MCP';
+  }
+}
+function selectMcpSource(source) {
+  mcpState.source = source;
+  document.querySelectorAll('.mcp-source-card').forEach((card) => card.classList.toggle('active', card.querySelector('input').value === source));
+  renderMcpTools();
+}
+
 $('#researchForm').addEventListener('submit', runInvestigation);
 $('#clearForm').addEventListener('click', () => { $('#drugInput').value = ''; $('#geneInput').value = ''; $('#variantInput').value = ''; $('#drugInput').focus(); state.report = null; setLoading(false); });
 $('#clearHistory').addEventListener('click', () => { localStorage.removeItem('pg-history'); renderHistory(); });
@@ -99,4 +190,9 @@ $('#languageSelect').addEventListener('change', (event) => { state.lang = event.
 $('#navHistory').addEventListener('click', () => $('#historyList').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 $('#navSources').addEventListener('click', () => $('.source-list').scrollIntoView({ behavior: 'smooth', block: 'center' }));
 document.querySelectorAll('.quick-chip').forEach((chip) => chip.addEventListener('click', () => { $('#drugInput').value = chip.dataset.drug; $('#geneInput').value = chip.dataset.gene; $('#variantInput').value = chip.dataset.variant || ''; runInvestigation(); }));
+document.querySelectorAll('input[name="mcpSource"]').forEach((input) => input.addEventListener('change', () => selectMcpSource(input.value)));
+$('#mcpToolSearch').addEventListener('input', renderMcpTools);
+$('#mcpToolSelect').addEventListener('change', (event) => { mcpState.selected = mcpState.tools.find((tool) => tool.name === event.target.value) || null; $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.'; renderMcpFields(); });
+$('#mcpToolForm').addEventListener('submit', callMcpTool);
 applyTheme(); applyLanguage(); bindGlare(); setLoading(false);
+loadMcpCatalog();

@@ -4,4 +4,6 @@ __pycache__/
 .streamlit/
 work/
 *.pyc
+.env
+.netlify
 

@@ -51,6 +51,21 @@
         </section>
 
         <section class="history-section"><div class="section-heading"><div><span class="panel-index">03</span><h2 data-i18n="recent">Последние исследования</h2></div><button class="text-button" id="clearHistory" type="button" data-i18n="clear_history">Очистить историю</button></div><div id="historyList" class="history-list"><p class="muted" data-i18n="no_history">История появится после первого запуска.</p></div></section>
+
+        <section class="mcp-lab-section" id="mcpLab">
+          <div class="section-heading"><div><span class="panel-index">04</span><h2>MCP-лаборатория</h2><p class="section-copy">Один интерфейс для трёх транспортов Model Context Protocol</p></div><span class="mcp-live-state"><i></i>JSON-RPC 2.0</span></div>
+          <div class="mcp-source-selector" role="radiogroup" aria-label="Источник MCP">
+            <label class="mcp-source-card active"><input type="radio" name="mcpSource" value="stdio" checked /><span class="mcp-source-number">01</span><strong>Локальный stdio</strong><small>дочерний Python-процесс</small></label>
+            <label class="mcp-source-card"><input type="radio" name="mcpSource" value="network" /><span class="mcp-source-number">02</span><strong>Локальный сетевой</strong><small>Streamable HTTP · порт 8000</small></label>
+            <label class="mcp-source-card"><input type="radio" name="mcpSource" value="external" /><span class="mcp-source-number">03</span><strong>Внешний medical-mcp</strong><small>Glama · FDA · PubMed · RxNorm</small></label>
+          </div>
+          <div class="mcp-workbench">
+            <div class="mcp-tool-picker"><div class="mcp-picker-head"><span class="micro-label">Инструменты</span><span id="mcpToolCount" class="mcp-tool-count">загрузка…</span></div><input id="mcpToolSearch" class="mcp-search" type="search" placeholder="Поиск по названию или разделу" /><select id="mcpToolSelect" class="mcp-tool-select" aria-label="Выберите MCP-инструмент"></select><p id="mcpToolDescription" class="mcp-tool-description">Выберите источник и инструмент.</p></div>
+            <form id="mcpToolForm" class="mcp-dynamic-form"><div class="micro-label">Параметры вызова</div><div id="mcpFormFields" class="mcp-form-fields"></div><button class="primary-button" id="mcpRunButton" type="submit"><span class="button-shine"></span><span class="button-label">Вызвать через MCP</span><span class="button-arrow">↗</span></button></form>
+            <div id="mcpToolResult" class="mcp-tool-result"><div class="mcp-result-empty"><span>+</span><p>Результат появится после вызова инструмента</p></div></div>
+          </div>
+          <details class="mcp-inspector"><summary><span>Инспектор MCP</span><small>initialize · tools/list · tools/call</small></summary><div class="mcp-inspector-grid"><div><div class="mcp-code-label">Запрос и ответ JSON-RPC</div><pre id="mcpTrace"><code>Пакеты появятся после первого вызова</code></pre></div><div><div class="mcp-code-label">Структурированный результат</div><pre id="mcpRawResult"><code>Результат появится после первого вызова</code></pre></div></div></details>
+        </section>
       </main>
       <footer class="footer"><span>PharmacoGen / 2026</span><span data-i18n="footer">Открытые источники · проверяемые гипотезы</span><a href="https://ui.shadcn.com/blocks" target="_blank" rel="noreferrer">shadcn/ui ↗</a></footer>
     </div>

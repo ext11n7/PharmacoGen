@@ -1,0 +1,22 @@
+{
+  "mcpServers": {
+    "pharmacogen-stdio": {
+      "command": "python",
+      "args": ["-m", "mcp_servers.stdio_server"],
+      "cwd": "${workspaceFolder}"
+    },
+    "pharmacogen-network": {
+      "url": "http://127.0.0.1:8000/mcp"
+    },
+    "medical-mcp-external": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "--package=medical-mcp",
+        "node",
+        "-e",
+        "console.log=console.error; import('medical-mcp/build/index.js')"
+      ]
+    }
+  }
+}

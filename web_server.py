@@ -25,7 +25,16 @@ class Handler(BaseHTTPRequestHandler):
     def do_GET(self) -> None:
         path = urlparse(self.path).path
         if path == "/api/health":
-            self._send(b'{"status":"ok"}', "application/json; charset=utf-8")
+            self._send(b'{"status":"ok","mcp":true}', "application/json; charset=utf-8")
+            return
+        if path == "/api/mcp/catalog":
+            try:
+                from mcp_clients.router import list_mcp_catalog
+
+                body = json.dumps(list_mcp_catalog(), ensure_ascii=False).encode()
+                self._send(body, "application/json; charset=utf-8")
+            except Exception as exc:
+                self._send(json.dumps({"error": f"Не удалось загрузить каталог MCP: {exc}"}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 500)
             return
         if path == "/api/investigate":
             self._send('{"error":"Используйте POST"}'.encode(), "application/json; charset=utf-8", 405)
@@ -42,7 +51,11 @@ class Handler(BaseHTTPRequestHandler):
         self._send(requested.read_bytes(), f"{content_types.get(requested.suffix, 'application/octet-stream')}; charset=utf-8")
 
     def do_POST(self) -> None:
-        if urlparse(self.path).path != "/api/investigate":
+        path = urlparse(self.path).path
+        if path == "/api/mcp/call":
+            self._handle_mcp_call()
+            return
+        if path != "/api/investigate":
             self._send(b"Not found", "text/plain; charset=utf-8", 404)
             return
         try:
@@ -59,6 +72,28 @@ class Handler(BaseHTTPRequestHandler):
             self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
         except Exception as exc:
             self._send(json.dumps({"error": f"Не удалось собрать данные: {exc}"}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 500)
+
+    def _handle_mcp_call(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            source = str(payload.get("source", "")).strip()
+            tool = str(payload.get("tool", "")).strip()
+            arguments = payload.get("arguments") or {}
+            if source not in {"stdio", "network", "external"}:
+                raise ValueError("Выберите источник MCP")
+            if not tool:
+                raise ValueError("Выберите инструмент MCP")
+            if not isinstance(arguments, dict):
+                raise ValueError("Параметры инструмента должны быть объектом")
+            from mcp_clients.router import MCPClientError, call_mcp_tool
+
+            result = call_mcp_tool(source, tool, arguments)
+            self._send(json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+        except ValueError as exc:
+            self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
+        except Exception as exc:
+            self._send(json.dumps({"error": f"Ошибка MCP: {exc}"}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 502)
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {format % args}")
