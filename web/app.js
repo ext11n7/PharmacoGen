@@ -38,20 +38,20 @@ function reactionChart(rows) {
   return `<div class="chart-block"><div class="chart-block-head"><div><div class="subheading">${t('reaction_chart')}</div><div class="chart-caption">FAERS</div></div><span class="chart-total">${visibleRows.length} ${t('records')}</span></div><div class="bar-chart">${visibleRows.map((row) => `<div class="bar-item" title="${esc(row.term)}"><span class="bar-value">${esc(row.count)}</span><i style="height:${Math.max(12, Math.round((Number(row.count) || 0) / max * 100))}%"></i><small>${esc(row.term)}</small></div>`).join('')}</div></div>`;
 }
 function relationNetwork(report, faersStatus, clinvarStatus, sourceState) {
-  const sourceTile = (kind, title, caption, isAvailable) => `<article class="network-source-tile"><div class="network-source-main"><span class="network-glyph">${kind === 'FAERS' ? 'F' : 'C'}</span><div><b>${kind}</b><small>${esc(title)}</small><em>${esc(caption)}</em></div></div>${sourceState(isAvailable)}</article>`;
-  return `<section class="report-network" aria-label="${esc(t('route_title'))}">
-    <div class="network-map-head"><div><span class="network-map-kicker">${esc(t('route_title'))}</span><h4>${state.lang === 'ru' ? 'Маршрут проверки' : 'Verification route'}</h4><p>${state.lang === 'ru' ? 'Сначала фиксируем пару, затем сверяем два независимых источника.' : 'First fix the pair, then compare two independent sources.'}</p></div><span class="network-map-status"><i></i>${state.lang === 'ru' ? 'схема активна' : 'route active'}</span></div>
-    <div class="network-query-row">
-      <div class="network-entity network-drug"><span class="network-glyph">D</span><span><small>${state.lang === 'ru' ? 'ПРЕПАРАТ' : 'DRUG'}</small><b>${esc(report.normalized_query.drug)}</b></span></div>
-      <div class="network-link"><i></i><span>${state.lang === 'ru' ? 'связка запроса' : 'query pair'}</span><i></i></div>
-      <div class="network-entity network-gene"><span class="network-glyph">G</span><span><small>${state.lang === 'ru' ? 'ГЕН' : 'GENE'}</small><b>${esc(report.normalized_query.gene)}</b></span></div>
+  const query = report.normalized_query || {};
+  const variant = query.variant || t('not_provided');
+  const sourceTile = (index, kind, title, caption, isAvailable) => `<article class="research-source-card ${isAvailable ? 'is-ready' : 'is-muted'}">
+    <span class="research-source-index">0${index}</span>
+    <div class="research-source-info"><div class="research-source-top"><strong>${kind}</strong>${sourceState(isAvailable)}</div><b>${esc(title)}</b><span>${esc(caption)}</span></div>
+    <span class="research-source-mark">${isAvailable ? '✓' : '—'}</span>
+  </article>`;
+  return `<section class="report-network research-board" aria-label="${esc(t('route_title'))}">
+    <div class="research-board-head"><div><span class="research-board-kicker">${state.lang === 'ru' ? 'КАРТА ИССЛЕДОВАНИЯ' : 'INVESTIGATION MAP'}</span><h4>${state.lang === 'ru' ? 'Досье проверяемой пары' : 'Investigation dossier'}</h4><p>${state.lang === 'ru' ? 'Один объект, два источника и понятный следующий шаг.' : 'One object, two sources, and a clear next step.'}</p></div><div class="research-board-state"><i></i><strong>${state.lang === 'ru' ? 'проверка активна' : 'review active'}</strong><small>${state.lang === 'ru' ? '2 источника' : '2 sources'}</small></div></div>
+    <div class="research-board-layout">
+      <article class="research-subject-card"><span class="research-card-label">01 · ${state.lang === 'ru' ? 'ОБЪЕКТ ПРОВЕРКИ' : 'CHECKED OBJECT'}</span><div class="research-subject-pair"><div class="research-subject-item"><span class="research-subject-mark">Rx</span><div><small>${state.lang === 'ru' ? 'ПРЕПАРАТ' : 'DRUG'}</small><strong>${esc(query.drug)}</strong></div></div><span class="research-subject-cross">×</span><div class="research-subject-item"><span class="research-subject-mark">DNA</span><div><small>${state.lang === 'ru' ? 'ГЕН' : 'GENE'}</small><strong>${esc(query.gene)}</strong></div></div></div><div class="research-subject-meta"><span>${state.lang === 'ru' ? 'ВАРИАНТ / ГЕНОТИП' : 'VARIANT / GENOTYPE'}</span><strong>${esc(variant)}</strong></div></article>
+      <div class="research-sources"><div class="research-sources-head"><span class="research-card-label">02 · ${state.lang === 'ru' ? 'ИСТОЧНИКИ' : 'SOURCES'}</span><small>${state.lang === 'ru' ? 'независимые проверки' : 'independent checks'}</small></div><div class="research-source-list">${sourceTile(1, 'FAERS', t('faers'), state.lang === 'ru' ? 'спонтанные сообщения о безопасности' : 'spontaneous safety reports', faersStatus)}${sourceTile(2, 'ClinVar', t('clinvar'), state.lang === 'ru' ? 'клиническая интерпретация вариантов' : 'clinical variant interpretation', clinvarStatus)}</div></div>
     </div>
-    <div class="network-downlink"><span></span><b>${state.lang === 'ru' ? 'проверка источников' : 'source check'}</b><span></span></div>
-    <div class="network-source-grid">
-      ${sourceTile('FAERS', t('faers'), state.lang === 'ru' ? 'спонтанные сообщения' : 'spontaneous reports', faersStatus)}
-      ${sourceTile('ClinVar', t('clinvar'), state.lang === 'ru' ? 'интерпретация вариантов' : 'variant interpretation', clinvarStatus)}
-    </div>
-    <div class="network-map-foot"><span class="network-foot-mark">✓</span><span>${state.lang === 'ru' ? 'Результаты источников объединены в журнале доказательств ниже.' : 'Source results are combined in the evidence journal below.'}</span></div>
+    <div class="research-board-footer"><div class="research-next-step"><span>03</span><div><strong>${state.lang === 'ru' ? 'Сопоставление сигналов' : 'Signal comparison'}</strong><small>${state.lang === 'ru' ? 'Результаты источников объединены в журнале доказательств ниже.' : 'Source results are combined in the evidence journal below.'}</small></div></div><span class="research-footer-status"><i></i>${state.lang === 'ru' ? 'готово к анализу' : 'ready for analysis'}</span></div>
   </section>`;
 }
 function variantPanel(report) {
