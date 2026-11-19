@@ -233,8 +233,34 @@ $('#downloadReport').addEventListener('click', downloadReport);
 $('#copyQuery').addEventListener('click', async () => { const variant = $('#variantInput').value.trim(); const query = `${$('#drugInput').value.trim()} × ${$('#geneInput').value.trim()}${variant ? ` × ${variant}` : ''}`; await navigator.clipboard?.writeText(query); toast(t('copied')); });
 $('#themeToggle').addEventListener('click', () => { state.theme = state.theme === 'dark' ? 'light' : 'dark'; applyTheme(); });
 $('#languageSelect').addEventListener('change', (event) => { state.lang = event.target.value; localStorage.setItem('pg-lang', state.lang); applyLanguage(); });
-$('#navHistory').addEventListener('click', () => $('#historyList').scrollIntoView({ behavior: 'smooth', block: 'center' }));
-$('#navSources').addEventListener('click', () => $('.source-list').scrollIntoView({ behavior: 'smooth', block: 'center' }));
+const floatingNav = $('#floatingNav');
+const floatingNavToggle = $('#floatingNavToggle');
+const floatingNavItems = [...document.querySelectorAll('.floating-nav-item')];
+const scrollToNavTarget = (targetId) => {
+  const target = document.getElementById(targetId);
+  if (!target) return;
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  floatingNavItems.forEach((item) => item.classList.toggle('active', item.dataset.scrollTarget === targetId));
+  document.body.classList.remove('nav-open');
+  floatingNavToggle.setAttribute('aria-expanded', 'false');
+};
+floatingNavItems.forEach((item) => item.addEventListener('click', () => scrollToNavTarget(item.dataset.scrollTarget)));
+floatingNavToggle.addEventListener('click', () => {
+  const expanded = !document.body.classList.contains('nav-open');
+  document.body.classList.toggle('nav-open', expanded);
+  floatingNavToggle.setAttribute('aria-expanded', String(expanded));
+});
+document.addEventListener('click', (event) => {
+  if (!floatingNav.contains(event.target)) {
+    document.body.classList.remove('nav-open');
+    floatingNavToggle.setAttribute('aria-expanded', 'false');
+  }
+});
+const navObserver = new IntersectionObserver((entries) => {
+  const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
+  if (visible) floatingNavItems.forEach((item) => item.classList.toggle('active', item.dataset.scrollTarget === visible.target.id));
+}, { rootMargin: '-35% 0px -55% 0px', threshold: [0, .2, .5] });
+['workspaceGrid', 'historySection', 'sourcesList', 'mcpLab'].forEach((id) => { const target = document.getElementById(id); if (target) navObserver.observe(target); });
 document.querySelectorAll('.quick-chip').forEach((chip) => chip.addEventListener('click', () => { $('#drugInput').value = chip.dataset.drug; $('#geneInput').value = chip.dataset.gene; $('#variantInput').value = chip.dataset.variant || ''; runInvestigation(); }));
 document.querySelectorAll('input[name="mcpSource"]').forEach((input) => input.addEventListener('change', () => selectMcpSource(input.value)));
 $('#mcpToolSearch').addEventListener('input', renderMcpTools);

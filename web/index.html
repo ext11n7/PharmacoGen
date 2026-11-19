@@ -27,9 +27,19 @@
           <div class="hero-side"><div class="hero-visual" aria-label="Анимация карты связей"><canvas id="heroCanvas"></canvas><div class="hero-visual-top"><span>THREE.JS / 01</span><span class="hero-visual-dot"></span></div><div class="hero-visual-bottom"><span data-i18n="hero_visual_caption">динамическая карта сигналов</span><span class="hero-visual-coordinates">00.01 / 02.04</span></div></div><div class="intro-meta"><span class="live-dot"></span><span data-i18n="live">источники доступны</span><span class="meta-separator"></span><span>FAERS + ClinVar</span></div></div>
         </section>
 
-        <section class="workspace-grid">
+        <aside class="floating-nav" id="floatingNav" aria-label="Навигация по разделам">
+          <button class="floating-nav-toggle" id="floatingNavToggle" type="button" aria-label="Открыть навигацию" aria-expanded="false" title="Навигация"><span>☰</span></button>
+          <div class="floating-nav-panel">
+            <div class="floating-nav-brand"><span>PG</span><strong>PharmacoGen</strong></div>
+            <span class="floating-nav-label" data-i18n="nav_workspace">Рабочая область</span>
+            <button class="floating-nav-item active" type="button" data-scroll-target="workspaceGrid"><span>⌂</span><span data-i18n="nav_research">Исследование</span></button>
+            <button class="floating-nav-item" type="button" data-scroll-target="historySection"><span>◷</span><span data-i18n="nav_history">История</span></button>
+            <button class="floating-nav-item" type="button" data-scroll-target="sourcesList"><span>◫</span><span data-i18n="nav_sources">Источники</span></button>
+          </div>
+        </aside>
+
+        <section class="workspace-grid" id="workspaceGrid">
           <aside class="query-rail">
-            <nav class="sidebar-nav" aria-label="Навигация"><div class="sidebar-brand"><span class="sidebar-brand-icon">PG</span><span>PharmacoGen</span></div><div class="sidebar-group-label" data-i18n="nav_workspace">Рабочая область</div><button class="sidebar-item active" type="button"><span>⌂</span><span data-i18n="nav_research">Исследование</span></button><button class="sidebar-item" type="button" id="navHistory"><span>◷</span><span data-i18n="nav_history">История</span></button><button class="sidebar-item" type="button" id="navSources"><span>◫</span><span data-i18n="nav_sources">Источники</span></button></nav>
             <div class="panel-head"><div><span class="panel-index">01</span><h2 data-i18n="new_research">Новое исследование</h2></div><button class="text-button" id="clearForm" type="button" data-i18n="clear">Очистить</button></div>
             <form id="researchForm" class="query-form">
               <label class="field"><span data-i18n="drug">Препарат</span><input id="drugInput" name="drug" value="warfarin" autocomplete="off" placeholder="warfarin" /></label>
@@ -38,7 +48,7 @@
               <button class="primary-button" id="runButton" type="submit"><span class="button-shine"></span><span class="button-label" data-i18n="run">Собрать доказательства</span><span class="button-arrow">↗</span></button>
             </form>
             <div class="quick-area"><div class="micro-label" data-i18n="examples">Быстрые примеры</div><div class="quick-chips"><button class="quick-chip" data-drug="warfarin" data-gene="CYP2C9" data-variant="*2/*3" type="button">warfarin <b>×</b> CYP2C9 <small>*2/*3</small></button><button class="quick-chip" data-drug="clopidogrel" data-gene="CYP2C19" data-variant="*2" type="button">clopidogrel <b>×</b> CYP2C19 <small>*2</small></button><button class="quick-chip" data-drug="carbamazepine" data-gene="HLA-B" data-variant="*15:02" type="button">carbamazepine <b>×</b> HLA-B <small>*15:02</small></button></div></div>
-            <div class="source-list"><div class="micro-label" data-i18n="sources">Источники</div><a href="https://open.fda.gov/apis/drug/event/" target="_blank" rel="noreferrer"><span class="source-symbol">FDA</span><span><strong>openFDA FAERS</strong><small data-i18n="faers_caption">спонтанные сообщения</small></span><span class="external">↗</span></a><a href="https://www.ncbi.nlm.nih.gov/clinvar/" target="_blank" rel="noreferrer"><span class="source-symbol">NCBI</span><span><strong>ClinVar</strong><small data-i18n="clinvar_caption">интерпретация вариантов</small></span><span class="external">↗</span></a></div>
+            <div class="source-list" id="sourcesList"><div class="micro-label" data-i18n="sources">Источники</div><a href="https://open.fda.gov/apis/drug/event/" target="_blank" rel="noreferrer"><span class="source-symbol">FDA</span><span><strong>openFDA FAERS</strong><small data-i18n="faers_caption">спонтанные сообщения</small></span><span class="external">↗</span></a><a href="https://www.ncbi.nlm.nih.gov/clinvar/" target="_blank" rel="noreferrer"><span class="source-symbol">NCBI</span><span><strong>ClinVar</strong><small data-i18n="clinvar_caption">интерпретация вариантов</small></span><span class="external">↗</span></a></div>
             <div class="rail-note"><span>!</span><p data-i18n="note">Исследовательский режим. Результат не является медицинской рекомендацией.</p></div>
           </aside>
 
@@ -50,7 +60,7 @@
           </section>
         </section>
 
-        <section class="history-section"><div class="section-heading"><div><span class="panel-index">03</span><h2 data-i18n="recent">Последние исследования</h2></div><button class="text-button" id="clearHistory" type="button" data-i18n="clear_history">Очистить историю</button></div><div id="historyList" class="history-list"><p class="muted" data-i18n="no_history">История появится после первого запуска.</p></div></section>
+        <section class="history-section" id="historySection"><div class="section-heading"><div><span class="panel-index">03</span><h2 data-i18n="recent">Последние исследования</h2></div><button class="text-button" id="clearHistory" type="button" data-i18n="clear_history">Очистить историю</button></div><div id="historyList" class="history-list"><p class="muted" data-i18n="no_history">История появится после первого запуска.</p></div></section>
 
         <section class="mcp-lab-section" id="mcpLab">
           <div class="section-heading"><div><span class="panel-index">04</span><h2>MCP-лаборатория</h2><p class="section-copy">Один интерфейс для трёх транспортов Model Context Protocol</p></div><span class="mcp-live-state"><i></i>JSON-RPC 2.0</span></div>

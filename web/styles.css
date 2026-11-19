@@ -493,3 +493,38 @@ h1 { max-width: 850px; margin-bottom: 22px; font-size: clamp(3.3rem, 5.8vw, 6.35
   .research-board-footer { align-items: flex-start; flex-direction: column; gap: 13px; }
   .research-next-step small { white-space: normal; }
 }
+
+/* Floating navigation keeps long research pages easy to move through. */
+html { scroll-behavior: smooth; }
+#workspaceGrid, #historySection, #sourcesList, #mcpLab { scroll-margin-top: 108px; }
+.floating-nav { position: fixed; top: 50%; left: 16px; z-index: 30; width: 58px; transform: translateY(-50%); transition: width .24s ease; }
+.floating-nav:hover, .floating-nav:focus-within, body.nav-open .floating-nav { width: 224px; }
+.floating-nav-panel { overflow: hidden; border: 1px solid var(--line-strong); border-radius: 16px; padding: 58px 8px 10px; background: color-mix(in srgb, var(--surface-solid) 94%, transparent); box-shadow: 0 18px 50px rgba(0,0,0,.12); backdrop-filter: blur(18px); }
+.floating-nav-toggle { position: absolute; top: 9px; left: 9px; display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); color: var(--text); cursor: pointer; font-size: 17px; transition: border-color .18s ease, background .18s ease; }
+.floating-nav-toggle:hover { border-color: var(--accent); background: var(--surface-solid); }
+.floating-nav-brand { display: flex; align-items: center; gap: 10px; min-width: 0; border-bottom: 1px solid var(--line); padding: 0 9px 14px; }
+.floating-nav-brand span { display: grid; place-items: center; flex: 0 0 auto; width: 29px; height: 29px; border-radius: 8px; background: var(--accent); color: var(--button-text); font: 850 9px ui-monospace, monospace; }
+.floating-nav-brand strong { overflow: hidden; color: var(--text); font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.floating-nav-label { display: block; margin: 15px 9px 8px; color: var(--quiet); font-size: 9px; font-weight: 800; letter-spacing: .13em; white-space: nowrap; }
+.floating-nav-item { display: flex; align-items: center; gap: 11px; width: 100%; border: 0; border-radius: 9px; padding: 11px 9px; background: transparent; color: var(--muted); cursor: pointer; font: inherit; text-align: left; transition: color .18s ease, background .18s ease; }
+.floating-nav-item:hover, .floating-nav-item:focus-visible, .floating-nav-item.active { background: var(--surface-soft); color: var(--text); outline: none; }
+.floating-nav-item > span:first-child { display: grid; place-items: center; flex: 0 0 auto; width: 22px; color: var(--accent); font-size: 16px; }
+.floating-nav-item > span:last-child, .floating-nav-brand strong, .floating-nav-label { opacity: 0; transform: translateX(-7px); pointer-events: none; transition: opacity .16s ease, transform .2s ease; }
+.floating-nav:hover .floating-nav-item > span:last-child, .floating-nav:hover .floating-nav-brand strong, .floating-nav:hover .floating-nav-label, .floating-nav:focus-within .floating-nav-item > span:last-child, .floating-nav:focus-within .floating-nav-brand strong, .floating-nav:focus-within .floating-nav-label, body.nav-open .floating-nav-item > span:last-child, body.nav-open .floating-nav-brand strong, body.nav-open .floating-nav-label { opacity: 1; transform: translateX(0); pointer-events: auto; }
+
+@media (max-width: 1180px) {
+  .floating-nav { top: auto; bottom: 17px; left: 50%; width: auto; transform: translateX(-50%); }
+  .floating-nav:hover, .floating-nav:focus-within, body.nav-open .floating-nav { width: auto; }
+  .floating-nav-panel { display: flex; align-items: center; gap: 4px; padding: 7px; border-radius: 14px; }
+  .floating-nav-toggle, .floating-nav-brand, .floating-nav-label { display: none; }
+  .floating-nav-item { width: auto; padding: 10px 12px; }
+  .floating-nav-item > span:last-child { opacity: 1; transform: none; pointer-events: auto; }
+  .floating-nav-item > span:first-child { width: 18px; }
+}
+
+@media (max-width: 580px) {
+  .floating-nav { bottom: 10px; max-width: calc(100% - 20px); }
+  .floating-nav-panel { max-width: 100%; overflow-x: auto; }
+  .floating-nav-item { padding: 9px 10px; font-size: 11px; white-space: nowrap; }
+  #workspaceGrid, #historySection, #sourcesList, #mcpLab { scroll-margin-top: 82px; }
+}
