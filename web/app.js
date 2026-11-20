@@ -104,17 +104,15 @@ function downloadReport() { if (!state.report) { toast(t('empty_input')); return
 
 const mcpState = { catalog: null, source: 'stdio', tools: [], selected: null };
 const mcpSourceGuides = {
-  stdio: { index: '01', title: 'Локальный stdio', text: 'Приложение запускает отдельный Python-процесс и обменивается с ним сообщениями MCP через stdin и stdout.', when: 'Для быстрых локальных расчётов и демонстрации протокола.' },
+  stdio: { index: '01', title: 'Локальный stdio', text: 'Приложение запускает отдельный Python-процесс и передаёт ему фармакогенетические задания через stdin и stdout.', when: 'Для подготовки запросов и демонстрации MCP без внешнего сервера.' },
   network: { index: '02', title: 'Локальный сетевой', text: 'Клиент обращается к отдельному MCP-серверу по Streamable HTTP. Сервер можно запускать независимо от веб-интерфейса.', when: 'Для проверки сетевого сценария и нескольких клиентов.' },
   external: { index: '03', title: 'Внешний medical-mcp', text: 'Клиент подключается к опубликованному медицинскому MCP из Glama и запрашивает данные внешних баз.', when: 'Для поиска литературы и сведений о препаратах из внешнего источника.' },
 };
 const mcpToolGuides = {
-  calculate_bmi_tool: { what: 'Рассчитывает индекс массы тела по массе и росту.', result: 'Показывает числовое значение, диапазон и краткую интерпретацию.' },
-  calculate_ckd_epi_tool: { what: 'Оценивает скорость клубочковой фильтрации по CKD-EPI 2021.', result: 'Возвращает расчётную СКФ и категорию диапазона.' },
-  calculate_chadsvasc_tool: { what: 'Считает баллы CHA₂DS₂-VASc по факторам риска.', result: 'Показывает сумму баллов и пояснение для учебного сценария.' },
-  calculate_gcs_tool: { what: 'Суммирует три компонента шкалы комы Глазго.', result: 'Возвращает итоговую оценку и её диапазон.' },
-  calculate_qsofa_tool: { what: 'Считает баллы qSOFA по частоте дыхания, давлению и сознанию.', result: 'Показывает сумму и уровень настороженности.' },
-  calculate_map_tool: { what: 'Рассчитывает среднее артериальное давление.', result: 'Возвращает значение в мм рт. ст. и категорию.' },
+  normalize_pharmacogenetic_query_tool: { what: 'Приводит препарат, ген и вариант к единому виду для всех источников.', result: 'Показывает согласованные сущности и готовые запросы для FAERS, ClinVar и PubMed.' },
+  build_evidence_query_tool: { what: 'Раскладывает исследование на отдельные задания для FAERS, ClinVar, PubMed и FDA.', result: 'Возвращает план запросов, назначение каждого источника и лимит выдачи.' },
+  classify_variant_for_review_tool: { what: 'Определяет формат записи варианта перед проверкой в ClinVar.', result: 'Показывает тип записи и следующий шаг, но не объявляет вариант патогенным.' },
+  compare_source_signals_tool: { what: 'Сопоставляет количество найденных сообщений, записей ClinVar и публикаций.', result: 'Показывает, есть ли сигналы в нескольких источниках, без вывода о причинности.' },
   'search-medical-literature': { what: 'Ищет публикации по препарату, гену или клиническому вопросу.', result: 'Возвращает найденные статьи и сведения для дальнейшей проверки.' },
   'get-drug-details': { what: 'Запрашивает сведения о препарате из внешнего медицинского источника.', result: 'Возвращает найденные записи и основные характеристики.' },
 };
@@ -123,7 +121,7 @@ function mcpSchema(tool) { return tool?.inputSchema || tool?.input_schema || { t
 function mcpProperties(tool) { return mcpSchema(tool).properties || {}; }
 function mcpLabel(name) { return name.replace(/_tool$/, '').replaceAll('_', ' '); }
 function mcpFieldLabel(name) {
-  const labels = { weight_kg: 'Масса тела', height_cm: 'Рост', creatinine_mg_dl: 'Креатинин', age: 'Возраст', sex: 'Пол', congestive_heart_failure: 'Сердечная недостаточность', hypertension: 'Артериальная гипертензия', diabetes: 'Сахарный диабет', stroke_history: 'Инсульт в анамнезе', vascular_disease: 'Сосудистое заболевание', respiratory_rate: 'Частота дыхания', systolic_bp: 'Систолическое давление', gcs_eye: 'Открывание глаз', gcs_verbal: 'Речевая реакция', gcs_motor: 'Двигательная реакция', diastolic_bp: 'Диастолическое давление', query: 'Поисковый запрос', max_results: 'Максимум результатов', drug_name: 'Название препарата' };
+  const labels = { drug: 'Препарат', gene: 'Ген', variant: 'Вариант или аллель', max_results: 'Максимум публикаций', faers_reports: 'Сообщения FAERS', clinvar_records: 'Записи ClinVar', pathogenic_records: 'Записи ClinVar с сигналом', literature_hits: 'Публикации', query: 'Поисковый запрос', drug_name: 'Название препарата' };
   return labels[name] || name.replaceAll('_', ' ');
 }
 function renderMcpGuide() {
@@ -184,6 +182,15 @@ function mcpArguments() {
     else result[field.dataset.mcpField] = field.value;
   });
   return result;
+}
+function prefillMcpFromResearch() {
+  const values = { drug: $('#drugInput').value.trim(), gene: $('#geneInput').value.trim(), variant: $('#variantInput').value.trim() };
+  let filled = 0;
+  document.querySelectorAll('[data-mcp-field]').forEach((field) => {
+    const value = values[field.dataset.mcpField];
+    if (value !== undefined) { field.value = value; filled += 1; }
+  });
+  toast(filled ? 'Данные исследования подставлены' : 'Сначала заполните препарат и ген');
 }
 function extractMcpValue(data) {
   const result = data?.result || {};
@@ -273,5 +280,6 @@ document.querySelectorAll('input[name="mcpSource"]').forEach((input) => input.ad
 $('#mcpToolSearch').addEventListener('input', renderMcpTools);
 $('#mcpToolSelect').addEventListener('change', (event) => { mcpState.selected = mcpState.tools.find((tool) => tool.name === event.target.value) || null; $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.'; renderMcpFields(); renderMcpToolHelp(); });
 $('#mcpToolForm').addEventListener('submit', callMcpTool);
+$('#mcpUseResearch').addEventListener('click', prefillMcpFromResearch);
 applyTheme(); applyLanguage(); bindGlare(); setLoading(false);
 loadMcpCatalog();

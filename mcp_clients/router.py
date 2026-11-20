@@ -219,17 +219,17 @@ def call_mcp_tool(source: str, tool_name: str, arguments: dict[str, Any]) -> dic
 
 def list_mcp_catalog() -> dict[str, Any]:
     """Return schemas used by the dynamic form before a tool is called."""
-    from mcp_servers.clinical_tools import list_calculators
+    from mcp_servers.pharmacogenetic_tools import list_pharmacogenetic_tools
 
     return {
         "sources": [
             {"id": "stdio", "title": "Локальный stdio", "description": "Дочерний Python-процесс и stdin/stdout JSON-RPC."},
-            {"id": "network", "title": "Локальный сетевой", "description": "MCP Streamable HTTP на http://127.0.0.1:8000/mcp; семь инструментов."},
+            {"id": "network", "title": "Локальный сетевой", "description": "MCP Streamable HTTP на http://127.0.0.1:8000/mcp; четыре фармакогенетических инструмента."},
             {"id": "external", "title": "Внешний medical-mcp", "description": "Пакет из каталога Glama с FDA, PubMed и RxNorm."},
         ],
         "local_tools": [
             {"name": f"{item['name']}_tool", "title": item["title"], "category": item["category"], "inputSchema": {"type": "object", "properties": item["parameters"]}, "source": item["source"]}
-            for item in list_calculators()
+            for item in list_pharmacogenetic_tools()
         ],
         "external_tools": [
             {"name": "search-medical-literature", "title": "Поиск медицинской литературы", "category": "внешний источник", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "Название препарата, гена или клинический вопрос"}, "max_results": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}}}, "source": "https://glama.ai/mcp/servers/JamesANZ/medical-mcp"},

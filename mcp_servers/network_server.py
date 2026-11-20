@@ -7,87 +7,67 @@ import os
 
 from mcp.server import MCPServer
 
-from .clinical_tools import (
-    calculate_bmi,
-    calculate_chadsvasc,
-    calculate_ckd_epi,
-    calculate_gcs,
-    calculate_map,
-    calculate_qsofa,
-    list_calculators,
-    Sex,
-    AdultAge,
-    CreatinineMgDl,
-    HeightCm,
-    WeightKg,
-    GcsEye,
-    GcsVerbal,
-    GcsMotor,
-    RespiratoryRate,
-    SystolicBp,
-    DiastolicBp,
+from .pharmacogenetic_tools import (
+    build_evidence_query,
+    classify_variant_for_review,
+    compare_source_signals,
+    DrugName,
+    EvidenceCount,
+    GeneSymbol,
+    MaxResults,
+    VariantName,
+    list_pharmacogenetic_tools,
+    normalize_pharmacogenetic_query,
 )
 
 
 logging.basicConfig(level=logging.INFO, format="[network-mcp] %(message)s")
 mcp = MCPServer(
     "pharmacogen-network",
-    description="Локальный каталог клинических методик PharmacoGen",
-    instructions="Сначала вызовите tools/list, затем передайте проверенные параметры в tools/call.",
+    description="Локальный каталог фармакогенетических инструментов PharmacoGen",
+    instructions="Сначала вызовите tools/list, затем передайте препарат, ген и вариант в tools/call.",
     version="1.0.0",
 )
 
 
 @mcp.tool()
-def calculate_bmi_tool(weight_kg: WeightKg, height_cm: HeightCm) -> dict:
-    """Рассчитать индекс массы тела."""
-    return calculate_bmi(weight_kg, height_cm)
+def normalize_pharmacogenetic_query_tool(drug: DrugName, gene: GeneSymbol, variant: VariantName = "") -> dict:
+    """Нормализовать препарат, ген и вариант для поиска."""
+    return normalize_pharmacogenetic_query(drug, gene, variant)
 
 
 @mcp.tool()
-def calculate_ckd_epi_tool(creatinine_mg_dl: CreatinineMgDl, age: AdultAge, sex: Sex) -> dict:
-    """Рассчитать оценочную СКФ CKD-EPI 2021."""
-    return calculate_ckd_epi(creatinine_mg_dl, age, sex)
-
-
-@mcp.tool()
-def calculate_chadsvasc_tool(
-    age: AdultAge,
-    sex: Sex,
-    congestive_heart_failure: bool = False,
-    hypertension: bool = False,
-    diabetes: bool = False,
-    stroke_history: bool = False,
-    vascular_disease: bool = False,
+def build_evidence_query_tool(
+    drug: DrugName,
+    gene: GeneSymbol,
+    variant: VariantName = "",
+    max_results: MaxResults = 5,
 ) -> dict:
-    """Рассчитать CHA₂DS₂-VASc."""
-    return calculate_chadsvasc(
-        age, sex, congestive_heart_failure, hypertension, diabetes, stroke_history, vascular_disease
-    )
+    """Собрать поисковые задания для FAERS, ClinVar, PubMed и FDA."""
+    return build_evidence_query(drug, gene, variant, max_results)
 
 
 @mcp.tool()
-def calculate_gcs_tool(eye: GcsEye, verbal: GcsVerbal, motor: GcsMotor) -> dict:
-    """Рассчитать сумму по шкале комы Глазго."""
-    return calculate_gcs(eye, verbal, motor)
+def classify_variant_for_review_tool(gene: GeneSymbol, variant: VariantName) -> dict:
+    """Подготовить формат варианта к проверке в ClinVar."""
+    return classify_variant_for_review(gene, variant)
 
 
 @mcp.tool()
-def calculate_qsofa_tool(respiratory_rate: RespiratoryRate, systolic_bp: SystolicBp, altered_mentation: bool) -> dict:
-    """Рассчитать qSOFA."""
-    return calculate_qsofa(respiratory_rate, systolic_bp, altered_mentation)
+def compare_source_signals_tool(
+    faers_reports: EvidenceCount = 0,
+    clinvar_records: EvidenceCount = 0,
+    pathogenic_records: EvidenceCount = 0,
+    literature_hits: EvidenceCount = 0,
+) -> dict:
+    """Сопоставить количество сигналов из уже собранных источников."""
+    return compare_source_signals(faers_reports, clinvar_records, pathogenic_records, literature_hits)
 
 
 @mcp.tool()
-def calculate_map_tool(systolic_bp: SystolicBp, diastolic_bp: DiastolicBp) -> dict:
-    """Рассчитать среднее артериальное давление."""
-    return calculate_map(systolic_bp, diastolic_bp)
-
-
-@mcp.tool()
-def list_calculators_tool() -> list[dict]:
-    """Показать каталог всех локальных клинических методик."""
-    return list_calculators()
+def list_pharmacogenetic_tools_tool() -> list[dict]:
+    """Показать каталог локальных инструментов PharmacoGen."""
+    return list_pharmacogenetic_tools()
 
 
 def main() -> None:
