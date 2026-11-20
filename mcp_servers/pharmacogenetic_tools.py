@@ -1,13 +1,12 @@
-"""Deterministic pharmacogenetics helpers exposed through MCP.
+"""Useful pharmacogenetic analysis tools exposed through MCP.
 
-These tools prepare and compare evidence queries. They do not make a clinical
-classification and deliberately keep external evidence retrieval in separate
-FAERS, ClinVar, FDA and PubMed connectors.
+The tools consume the evidence already collected by PharmacoGen. They do not
+pretend to make a medical decision: their job is to structure signals, expose
+gaps and prioritize the next verification step.
 """
 
 from __future__ import annotations
 
-import re
 from typing import Annotated, Any
 
 from pydantic import Field
@@ -16,171 +15,210 @@ from pydantic import Field
 ToolResult = dict[str, Any]
 DrugName = Annotated[str, Field(min_length=2, max_length=120, description="Название препарата")]
 GeneSymbol = Annotated[str, Field(min_length=2, max_length=40, description="Символ гена, например CYP2C9")]
-VariantName = Annotated[str, Field(max_length=120, description="Вариант или аллель, например rs1799853 или *2")]
-MaxResults = Annotated[int, Field(ge=1, le=20, description="Максимум результатов для внешнего поиска")]
-EvidenceCount = Annotated[int, Field(ge=0, le=1_000_000, description="Количество найденных записей")]
+OptionalText = Annotated[str, Field(max_length=240, description="Необязательное значение")]
+ReportCount = Annotated[int, Field(ge=0, le=1_000_000, description="Количество записей")]
+Rate = Annotated[float, Field(ge=0, le=1, description="Доля от 0 до 1")]
 
 
 def _clean(value: str, name: str, *, required: bool = True) -> str:
     text = " ".join(str(value or "").strip().split())
     if required and not text:
-        raise ValueError(f"{name}: значение не должно быть пустым")
+        raise ValueError(f"{name}: заполните это поле")
     return text
 
 
-def _result(summary: str, details: dict[str, Any], next_step: str) -> ToolResult:
+def _result(summary: str, details: dict[str, Any], next_steps: list[str]) -> ToolResult:
     return {
         "summary": summary,
         "details": details,
-        "next_step": next_step,
-        "disclaimer": "Результат помогает организовать поиск и не является клиническим выводом или рекомендацией.",
+        "next_steps": next_steps,
+        "next_step": next_steps[0] if next_steps else "",
+        "disclaimer": "Анализ помогает организовать проверку данных и не является клиническим выводом или рекомендацией.",
     }
 
 
-def normalize_pharmacogenetic_query(drug: DrugName, gene: GeneSymbol, variant: VariantName = "") -> ToolResult:
-    """Нормализовать три сущности для согласованного поиска по источникам."""
-    normalized_drug = _clean(drug, "drug")
-    normalized_gene = _clean(gene, "gene").upper()
-    normalized_variant = _clean(variant, "variant", required=False).upper()
-    pair = f"{normalized_drug} {normalized_gene}"
-    return _result(
-        "Сущности подготовлены для межисточникового поиска.",
-        {
-            "drug": normalized_drug,
-            "gene": normalized_gene,
-            "variant": normalized_variant or None,
-            "faers_query": pair,
-            "clinvar_query": f"{normalized_gene} {normalized_variant}".strip(),
-            "pubmed_query": f'"{normalized_drug}" AND "{normalized_gene}"',
-        },
-        "Передать запросы агентам FAERS, ClinVar и внешнему поиску литературы.",
-    )
-
-
-def build_evidence_query(
+def synthesize_evidence(
     drug: DrugName,
     gene: GeneSymbol,
-    variant: VariantName = "",
-    max_results: MaxResults = 5,
+    variant: OptionalText = "",
+    faers_available: bool = False,
+    faers_reports: ReportCount = 0,
+    faers_serious_rate: Rate = 0,
+    clinvar_available: bool = False,
+    clinvar_records: ReportCount = 0,
+    clinvar_pathogenic_records: ReportCount = 0,
+    top_reaction: OptionalText = "",
 ) -> ToolResult:
-    """Собрать отдельные поисковые задания для источников проекта."""
-    normalized = normalize_pharmacogenetic_query(drug, gene, variant)
-    data = normalized["details"]
-    return _result(
-        "План сбора доказательств собран.",
-        {
-            "entities": {"drug": data["drug"], "gene": data["gene"], "variant": data["variant"]},
-            "requests": [
-                {"source": "FAERS", "purpose": "частота спонтанных сообщений", "query": data["faers_query"]},
-                {"source": "ClinVar", "purpose": "вариант и клиническая интерпретация", "query": data["clinvar_query"]},
-                {"source": "PubMed", "purpose": "публикации о связи препарата и гена", "query": data["pubmed_query"], "max_results": max_results},
-                {"source": "FDA", "purpose": "маркировка и сведения о препарате", "query": data["drug"]},
-            ],
-        },
-        "Запустить поиск, затем сопоставить результаты по варианту и источнику.",
-    )
-
-
-def classify_variant_for_review(gene: GeneSymbol, variant: VariantName) -> ToolResult:
-    """Определить формат записи варианта и следующий источник проверки."""
+    """Сопоставить уже собранные сводки FAERS и ClinVar."""
+    normalized_drug = _clean(drug, "drug")
     normalized_gene = _clean(gene, "gene").upper()
-    normalized_variant = _clean(variant, "variant").upper()
-    if re.fullmatch(r"RS\d+", normalized_variant):
-        notation = "идентификатор dbSNP"
-    elif "*" in normalized_variant:
-        notation = "звёздный аллель"
-    elif re.search(r"\b[CGP]?\.\d+", normalized_variant):
-        notation = "HGVS-подобная запись"
+    normalized_variant = _clean(variant, "variant", required=False)
+    available_sources = int(faers_available) + int(clinvar_available)
+    if faers_available and clinvar_available and faers_reports and clinvar_pathogenic_records:
+        summary = "Есть сигналы в двух источниках: требуется предметная проверка связи."
+        priority = "высокий"
+    elif available_sources >= 1 and (faers_reports or clinvar_records):
+        summary = "Есть отдельные сигналы: нужно проверить их согласованность."
+        priority = "средний"
+    elif available_sources == 2:
+        summary = "Источники доступны, но в текущем срезе сильных сигналов не найдено."
+        priority = "низкий"
     else:
-        notation = "свободная запись"
+        summary = "Срез неполный: сначала нужно восстановить недоступный источник."
+        priority = "средний"
+    missing = []
+    if not faers_available:
+        missing.append("FAERS недоступен")
+    if not clinvar_available:
+        missing.append("ClinVar недоступен")
+    next_steps = []
+    if clinvar_pathogenic_records:
+        next_steps.append("Открыть записи ClinVar и проверить классификацию конкретного варианта.")
+    if faers_reports:
+        next_steps.append("Проверить профиль реакций FAERS и не трактовать число сообщений как частоту.")
+    if normalized_variant:
+        next_steps.append(f"Сопоставить вариант {normalized_variant} с публикациями по {normalized_drug} и {normalized_gene}.")
+    else:
+        next_steps.append("Уточнить вариант или генотип перед предметной интерпретацией.")
+    if missing:
+        next_steps.insert(0, "; ".join(missing) + ".")
     return _result(
-        "Вариант подготовлен к проверке, клиническая классификация не выполнялась.",
+        summary,
         {
-            "gene": normalized_gene,
-            "variant": normalized_variant,
-            "notation": notation,
-            "review_status": "готов к поиску",
-            "recommended_source": "ClinVar",
+            "pair": f"{normalized_drug} × {normalized_gene}",
+            "variant": normalized_variant or "не указан",
+            "priority": priority,
+            "available_sources": available_sources,
+            "faers": {"available": faers_available, "reports": faers_reports, "serious_rate": round(faers_serious_rate, 3), "top_reaction": _clean(top_reaction, "top_reaction", required=False) or "нет данных"},
+            "clinvar": {"available": clinvar_available, "records": clinvar_records, "pathogenic_records": clinvar_pathogenic_records},
         },
-        "Проверить вариант в ClinVar и сопоставить его с литературой и препаратом.",
+        next_steps[:4],
     )
 
 
-def compare_source_signals(
-    faers_reports: EvidenceCount = 0,
-    clinvar_records: EvidenceCount = 0,
-    pathogenic_records: EvidenceCount = 0,
-    literature_hits: EvidenceCount = 0,
+def prioritize_variant_review(
+    drug: DrugName,
+    gene: GeneSymbol,
+    variant: OptionalText = "",
+    classification: OptionalText = "",
+    review_status: OptionalText = "",
+    traits: OptionalText = "",
 ) -> ToolResult:
-    """Сопоставить уже собранные количества записей без вывода о причинности."""
-    counts = {
-        "FAERS сообщений": faers_reports,
-        "ClinVar записей": clinvar_records,
-        "ClinVar записей с клиническим сигналом": pathogenic_records,
-        "публикаций": literature_hits,
-    }
-    active = sum(value > 0 for value in counts.values())
-    if faers_reports and clinvar_records and pathogenic_records:
-        state = "есть сигналы в нескольких источниках"
-    elif active >= 2:
-        state = "есть отдельные сигналы для проверки"
-    elif active == 1:
-        state = "сигнал найден только в одном источнике"
+    """Выбрать приоритет проверки варианта по записи ClinVar."""
+    normalized_drug = _clean(drug, "drug")
+    normalized_gene = _clean(gene, "gene").upper()
+    normalized_variant = _clean(variant, "variant", required=False)
+    normalized_classification = _clean(classification, "classification", required=False)
+    classification_lower = normalized_classification.casefold()
+    if "pathogenic" in classification_lower:
+        priority, status = "высокий", "классификация требует первоочередной проверки"
+    elif normalized_variant:
+        priority, status = "средний", "вариант найден, но классификация требует уточнения"
     else:
-        state = "данных для сравнения пока недостаточно"
+        priority, status = "низкий", "вариант для приоритизации не указан"
+    next_steps = [
+        f"Проверить запись ClinVar для {normalized_gene} и варианта {normalized_variant or 'не указан'}.",
+        f"Найти публикации о взаимодействии {normalized_drug} × {normalized_gene}.",
+    ]
+    if normalized_classification:
+        next_steps.insert(0, f"Сверить классификацию «{normalized_classification}» с критериями и датой оценки.")
     return _result(
-        state,
-        {"counts": counts, "active_sources": active, "comparison_state": state},
-        "Открыть исходные записи и проверить согласованность варианта, препарата и контекста.",
+        status,
+        {
+            "pair": f"{normalized_drug} × {normalized_gene}",
+            "variant": normalized_variant or "не указан",
+            "priority": priority,
+            "classification": normalized_classification or "не указана",
+            "review_status": _clean(review_status, "review_status", required=False) or "не указан",
+            "traits": _clean(traits, "traits", required=False) or "не указаны",
+        },
+        next_steps,
+    )
+
+
+def audit_evidence_quality(
+    faers_available: bool = False,
+    faers_reports: ReportCount = 0,
+    clinvar_available: bool = False,
+    clinvar_records: ReportCount = 0,
+    has_variant: bool = False,
+    has_source_links: bool = False,
+) -> ToolResult:
+    """Проверить полноту среза перед его использованием в выводе."""
+    checks = {
+        "FAERS отвечает": faers_available,
+        "ClinVar отвечает": clinvar_available,
+        "FAERS содержит записи": faers_reports > 0,
+        "ClinVar содержит записи": clinvar_records > 0,
+        "вариант указан": has_variant,
+        "ссылки на источники сохранены": has_source_links,
+    }
+    passed = sum(checks.values())
+    score = round(passed / len(checks) * 100)
+    missing = [name for name, ok in checks.items() if not ok]
+    if score >= 85:
+        summary = "Срез достаточно полный для исследовательского просмотра."
+    elif score >= 55:
+        summary = "Срез частично готов: перед выводом нужно закрыть пробелы."
+    else:
+        summary = "Срез недостаточен для содержательного сопоставления."
+    return _result(
+        summary,
+        {"quality_score": score, "passed_checks": passed, "total_checks": len(checks), "checks": checks, "missing": missing},
+        [f"Закрыть: {', '.join(missing)}."] if missing else ["Сохранить ссылки и перейти к ручной проверке исходных записей."],
     )
 
 
 def list_pharmacogenetic_tools() -> list[dict[str, Any]]:
-    """Вернуть каталог локальных инструментов и их динамические формы."""
+    """Вернуть каталог инструментов, которые анализируют текущий отчёт."""
     return [
         {
-            "name": "normalize_pharmacogenetic_query",
-            "title": "Нормализация запроса",
-            "category": "подготовка поиска",
+            "name": "synthesize_evidence",
+            "title": "Синтез доказательств",
+            "category": "анализ текущего отчёта",
+            "required": ["drug", "gene"],
             "parameters": {
-                "drug": {"type": "string", "description": "Например warfarin"},
-                "gene": {"type": "string", "description": "Например CYP2C9"},
-                "variant": {"type": "string", "description": "Необязательно: rs1799853 или *2"},
-            },
-            "source": "локальная логика PharmacoGen",
-        },
-        {
-            "name": "build_evidence_query",
-            "title": "План сбора доказательств",
-            "category": "маршрутизация источников",
-            "parameters": {
-                "drug": {"type": "string", "description": "Название препарата"},
-                "gene": {"type": "string", "description": "Символ гена"},
-                "variant": {"type": "string", "description": "Необязательно: вариант или аллель"},
-                "max_results": {"type": "integer", "minimum": 1, "maximum": 20, "default": 5, "unit": "записей"},
-            },
-            "source": "локальная логика PharmacoGen",
-        },
-        {
-            "name": "classify_variant_for_review",
-            "title": "Подготовка варианта",
-            "category": "ClinVar",
-            "parameters": {
-                "gene": {"type": "string", "description": "Символ гена"},
-                "variant": {"type": "string", "description": "Например rs1799853, *2 или c.430C>T"},
-            },
-            "source": "локальная логика PharmacoGen",
-        },
-        {
-            "name": "compare_source_signals",
-            "title": "Сопоставление сигналов",
-            "category": "синтез доказательств",
-            "parameters": {
+                "drug": {"type": "string", "description": "Препарат из текущего исследования"},
+                "gene": {"type": "string", "description": "Ген из текущего исследования"},
+                "variant": {"type": "string", "description": "Необязательно: вариант или генотип"},
+                "faers_available": {"type": "boolean", "default": False, "description": "FAERS ответил"},
                 "faers_reports": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "сообщений"},
+                "faers_serious_rate": {"type": "number", "minimum": 0, "maximum": 1, "default": 0, "unit": "доля"},
+                "clinvar_available": {"type": "boolean", "default": False, "description": "ClinVar ответил"},
                 "clinvar_records": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "записей"},
-                "pathogenic_records": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "записей"},
-                "literature_hits": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "публикаций"},
+                "clinvar_pathogenic_records": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "записей"},
+                "top_reaction": {"type": "string", "description": "Самая частая реакция, если есть"},
             },
-            "source": "локальная логика PharmacoGen",
+            "source": "локальная аналитика PharmacoGen",
+        },
+        {
+            "name": "prioritize_variant_review",
+            "title": "Приоритет проверки варианта",
+            "category": "ClinVar",
+            "required": ["drug", "gene"],
+            "parameters": {
+                "drug": {"type": "string", "description": "Препарат"},
+                "gene": {"type": "string", "description": "Символ гена"},
+                "variant": {"type": "string", "description": "Вариант из записи ClinVar"},
+                "classification": {"type": "string", "description": "Классификация ClinVar"},
+                "review_status": {"type": "string", "description": "Статус проверки ClinVar"},
+                "traits": {"type": "string", "description": "Связанные признаки"},
+            },
+            "source": "локальная аналитика PharmacoGen",
+        },
+        {
+            "name": "audit_evidence_quality",
+            "title": "Контроль качества данных",
+            "category": "проверка полноты",
+            "required": [],
+            "parameters": {
+                "faers_available": {"type": "boolean", "default": False, "description": "FAERS ответил"},
+                "faers_reports": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "сообщений"},
+                "clinvar_available": {"type": "boolean", "default": False, "description": "ClinVar ответил"},
+                "clinvar_records": {"type": "integer", "minimum": 0, "maximum": 1000000, "default": 0, "unit": "записей"},
+                "has_variant": {"type": "boolean", "default": False, "description": "Вариант указан"},
+                "has_source_links": {"type": "boolean", "default": False, "description": "Ссылки сохранены"},
+            },
+            "source": "локальная аналитика PharmacoGen",
         },
     ]

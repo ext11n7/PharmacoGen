@@ -7,10 +7,47 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from agents import run_investigation
+from mcp_clients.router import MCPClientError, MCPValidationError, call_mcp_tool
 
 
 ROOT = Path(__file__).parent
 WEB = ROOT / "web"
+
+
+def _mcp_field_label(name: str) -> str:
+    labels = {
+        "drug": "Препарат",
+        "gene": "Ген",
+        "query": "Поисковый запрос",
+        "drug_name": "Название препарата",
+    }
+    return labels.get(name, name.replace("_", " "))
+
+
+def _validate_mcp_arguments(source: str, tool: str, arguments: dict[str, object]) -> None:
+    from mcp_clients.router import list_mcp_catalog
+
+    catalog = list_mcp_catalog()
+    tools = catalog["external_tools"] if source == "external" else catalog["local_tools"]
+    selected = next((item for item in tools if item["name"] == tool), None)
+    if selected is None:
+        raise ValueError("Инструмент MCP не найден")
+    schema = selected.get("inputSchema", {})
+    properties = schema.get("properties", {})
+    missing = [name for name in schema.get("required", []) if arguments.get(name) is None or str(arguments.get(name, "")).strip() == ""]
+    if missing:
+        raise ValueError(f"Заполните: {', '.join(_mcp_field_label(name) for name in missing)}")
+    for name, value in arguments.items():
+        field = properties.get(name, {})
+        field_type = field.get("type")
+        if field_type in {"integer", "number"} and (isinstance(value, bool) or not isinstance(value, (int, float))):
+            raise ValueError(f"Поле «{_mcp_field_label(name)}» должно быть числом")
+        if field_type == "integer" and isinstance(value, float) and not value.is_integer():
+            raise ValueError(f"Поле «{_mcp_field_label(name)}» должно быть целым числом")
+        if field.get("minimum") is not None and value < field["minimum"]:
+            raise ValueError(f"Поле «{_mcp_field_label(name)}» не может быть меньше {field['minimum']}")
+        if field.get("maximum") is not None and value > field["maximum"]:
+            raise ValueError(f"Поле «{_mcp_field_label(name)}» не может быть больше {field['maximum']}")
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -86,10 +123,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Выберите инструмент MCP")
             if not isinstance(arguments, dict):
                 raise ValueError("Параметры инструмента должны быть объектом")
-            from mcp_clients.router import MCPClientError, call_mcp_tool
-
+            _validate_mcp_arguments(source, tool, arguments)
             result = call_mcp_tool(source, tool, arguments)
             self._send(json.dumps(result, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+        except MCPValidationError as exc:
+            self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
+        except MCPClientError as exc:
+            self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 502)
         except ValueError as exc:
             self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
         except Exception as exc:

@@ -68,7 +68,7 @@
 
         <section class="page-view mcp-page hidden" id="mcpPage" data-page="mcp">
         <section class="mcp-lab-section" id="mcpLab">
-          <div class="section-heading"><div><span class="panel-index">04</span><h2>MCP-лаборатория</h2><p class="section-copy">Один интерфейс для трёх транспортов Model Context Protocol</p></div><span class="mcp-live-state"><i></i>JSON-RPC 2.0</span></div>
+          <div class="section-heading"><div><span class="panel-index">04</span><h2>MCP-лаборатория</h2><p class="section-copy">Анализ уже собранных данных FAERS и ClinVar через Model Context Protocol</p></div><div class="mcp-heading-actions"><button class="outline-button" id="mcpAnalyzeReport" type="button">Анализировать текущий отчёт</button><span class="mcp-live-state"><i></i>JSON-RPC 2.0</span></div></div>
           <div class="mcp-source-selector" role="radiogroup" aria-label="Источник MCP">
             <label class="mcp-source-card active"><input type="radio" name="mcpSource" value="stdio" checked /><span class="mcp-source-number">01</span><strong>Локальный stdio</strong><small>дочерний Python-процесс</small></label>
             <label class="mcp-source-card"><input type="radio" name="mcpSource" value="network" /><span class="mcp-source-number">02</span><strong>Локальный сетевой</strong><small>Streamable HTTP · порт 8000</small></label>
@@ -76,7 +76,7 @@
           </div>
           <div class="mcp-source-guide" id="mcpSourceGuide" aria-live="polite">
             <div class="mcp-guide-index" id="mcpGuideIndex">01</div>
-            <div class="mcp-guide-copy"><span>КАК ЭТО РАБОТАЕТ</span><strong id="mcpGuideTitle">Локальный stdio</strong><p id="mcpGuideText">Приложение запускает отдельный Python-процесс и обменивается с ним сообщениями MCP через stdin и stdout.</p></div>
+            <div class="mcp-guide-copy"><span>КАК ЭТО РАБОТАЕТ</span><strong id="mcpGuideTitle">Локальный stdio</strong><p id="mcpGuideText">Приложение запускает отдельный Python-процесс и передаёт ему сводку текущего исследования через stdin и stdout.</p></div>
             <div class="mcp-guide-when"><span>КОГДА ИСПОЛЬЗОВАТЬ</span><strong id="mcpGuideWhen">Для быстрых локальных расчётов и демонстрации протокола.</strong></div>
             <div class="mcp-guide-steps"><i>1</i><span>запуск</span><i>2</i><span>список инструментов</span><i>3</i><span>вызов</span></div>
           </div>

@@ -377,10 +377,13 @@ h1 { max-width: 850px; margin-bottom: 22px; font-size: clamp(3.3rem, 5.8vw, 6.35
 .mcp-result-next span { color: var(--quiet); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
 .mcp-result-next p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
 .mcp-result-disclaimer { margin: 14px 0 0; color: var(--quiet); font-size: 9px; line-height: 1.45; }
+.mcp-heading-actions { display: flex; align-items: center; gap: 14px; }
+.mcp-user-error { color: var(--warn); }
 
 @media (max-width: 580px) {
   .mcp-detail-grid, .mcp-count-grid { grid-template-columns: 1fr; }
   .mcp-request-row { grid-template-columns: 1fr; gap: 5px; }
+  .mcp-heading-actions { align-items: flex-start; flex-direction: column; gap: 8px; }
 }
 
 /* Structured evidence route and contextual MCP guidance. */

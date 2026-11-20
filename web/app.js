@@ -104,15 +104,14 @@ function downloadReport() { if (!state.report) { toast(t('empty_input')); return
 
 const mcpState = { catalog: null, source: 'stdio', tools: [], selected: null };
 const mcpSourceGuides = {
-  stdio: { index: '01', title: 'Локальный stdio', text: 'Приложение запускает отдельный Python-процесс и передаёт ему фармакогенетические задания через stdin и stdout.', when: 'Для подготовки запросов и демонстрации MCP без внешнего сервера.' },
-  network: { index: '02', title: 'Локальный сетевой', text: 'Клиент обращается к отдельному MCP-серверу по Streamable HTTP. Сервер можно запускать независимо от веб-интерфейса.', when: 'Для проверки сетевого сценария и нескольких клиентов.' },
+  stdio: { index: '01', title: 'Локальный stdio', text: 'Приложение запускает отдельный Python-процесс и передаёт ему сводку текущего исследования через stdin и stdout.', when: 'Для локального анализа отчёта и демонстрации MCP без внешнего сервера.' },
+  network: { index: '02', title: 'Локальный сетевой', text: 'Клиент обращается к отдельному аналитическому MCP-серверу по Streamable HTTP. Сервер можно запускать независимо от веб-интерфейса.', when: 'Для проверки сетевого сценария и нескольких клиентов.' },
   external: { index: '03', title: 'Внешний medical-mcp', text: 'Клиент подключается к опубликованному медицинскому MCP из Glama и запрашивает данные внешних баз.', when: 'Для поиска литературы и сведений о препаратах из внешнего источника.' },
 };
 const mcpToolGuides = {
-  normalize_pharmacogenetic_query_tool: { what: 'Приводит препарат, ген и вариант к единому виду для всех источников.', result: 'Показывает согласованные сущности и готовые запросы для FAERS, ClinVar и PubMed.' },
-  build_evidence_query_tool: { what: 'Раскладывает исследование на отдельные задания для FAERS, ClinVar, PubMed и FDA.', result: 'Возвращает план запросов, назначение каждого источника и лимит выдачи.' },
-  classify_variant_for_review_tool: { what: 'Определяет формат записи варианта перед проверкой в ClinVar.', result: 'Показывает тип записи и следующий шаг, но не объявляет вариант патогенным.' },
-  compare_source_signals_tool: { what: 'Сопоставляет количество найденных сообщений, записей ClinVar и публикаций.', result: 'Показывает, есть ли сигналы в нескольких источниках, без вывода о причинности.' },
+  synthesize_evidence_tool: { what: 'Анализирует сводку текущего исследования после работы FAERS и ClinVar.', result: 'Показывает состояние сигналов, приоритет проверки и следующий шаг без медицинского вывода.' },
+  prioritize_variant_review_tool: { what: 'Выбирает приоритет ручной проверки варианта из записи ClinVar.', result: 'Учитывает классификацию, статус проверки и связанные признаки.' },
+  audit_evidence_quality_tool: { what: 'Проверяет, достаточно ли полон собранный срез для исследовательского просмотра.', result: 'Возвращает оценку полноты и конкретный список пробелов.' },
   'search-medical-literature': { what: 'Ищет публикации по препарату, гену или клиническому вопросу.', result: 'Возвращает найденные статьи и сведения для дальнейшей проверки.' },
   'get-drug-details': { what: 'Запрашивает сведения о препарате из внешнего медицинского источника.', result: 'Возвращает найденные записи и основные характеристики.' },
 };
@@ -121,7 +120,7 @@ function mcpSchema(tool) { return tool?.inputSchema || tool?.input_schema || { t
 function mcpProperties(tool) { return mcpSchema(tool).properties || {}; }
 function mcpLabel(name) { return name.replace(/_tool$/, '').replaceAll('_', ' '); }
 function mcpFieldLabel(name) {
-  const labels = { drug: 'Препарат', gene: 'Ген', variant: 'Вариант или аллель', max_results: 'Максимум публикаций', faers_reports: 'Сообщения FAERS', clinvar_records: 'Записи ClinVar', pathogenic_records: 'Записи ClinVar с сигналом', literature_hits: 'Публикации', query: 'Поисковый запрос', drug_name: 'Название препарата' };
+  const labels = { drug: 'Препарат', gene: 'Ген', variant: 'Вариант или аллель', classification: 'Классификация ClinVar', review_status: 'Статус проверки', traits: 'Связанные признаки', faers_available: 'FAERS ответил', faers_reports: 'Сообщения FAERS', faers_serious_rate: 'Доля серьёзных сообщений', clinvar_available: 'ClinVar ответил', clinvar_records: 'Записи ClinVar', clinvar_pathogenic_records: 'Записи ClinVar с сигналом', top_reaction: 'Частая реакция', has_variant: 'Вариант указан', has_source_links: 'Ссылки сохранены', query: 'Поисковый запрос', drug_name: 'Название препарата', max_results: 'Максимум публикаций' };
   return labels[name] || name.replaceAll('_', ' ');
 }
 function renderMcpGuide() {
@@ -163,6 +162,13 @@ function renderMcpTools() {
   renderMcpGuide();
   renderMcpToolHelp();
 }
+function selectMcpTool(name) {
+  mcpState.selected = mcpState.tools.find((tool) => tool.name === name) || mcpState.tools[0] || null;
+  if (mcpState.selected) $('#mcpToolSelect').value = mcpState.selected.name;
+  $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.';
+  renderMcpFields();
+  renderMcpToolHelp();
+}
 async function loadMcpCatalog() {
   try {
     const response = await fetch('/api/mcp/catalog');
@@ -177,11 +183,22 @@ function mcpArguments() {
   document.querySelectorAll('[data-mcp-field]').forEach((field) => {
     const schema = mcpProperties(mcpState.selected)[field.dataset.mcpField] || {};
     if (field.type === 'checkbox') result[field.dataset.mcpField] = field.checked;
-    else if (schema.type === 'number') result[field.dataset.mcpField] = Number(field.value);
-    else if (schema.type === 'integer') result[field.dataset.mcpField] = Number.parseInt(field.value, 10);
-    else result[field.dataset.mcpField] = field.value;
+    else if (field.value.trim() !== '') {
+      if (schema.type === 'number') result[field.dataset.mcpField] = Number(field.value);
+      else if (schema.type === 'integer') result[field.dataset.mcpField] = Number.parseInt(field.value, 10);
+      else result[field.dataset.mcpField] = field.value.trim();
+    } else if (schema.default !== undefined) result[field.dataset.mcpField] = schema.default;
   });
   return result;
+}
+function validateMcpArguments(argumentsObject) {
+  const schema = mcpSchema(mcpState.selected);
+  const properties = schema.properties || {};
+  const required = schema.required || [];
+  const missing = required.filter((name) => argumentsObject[name] === undefined || argumentsObject[name] === '');
+  if (missing.length) return `Заполните: ${missing.map(mcpFieldLabel).join(', ')}`;
+  const invalid = Object.entries(argumentsObject).find(([name, value]) => ['number', 'integer'].includes(properties[name]?.type) && !Number.isFinite(value));
+  return invalid ? `Проверьте поле «${mcpFieldLabel(invalid[0])}»` : '';
 }
 function prefillMcpFromResearch() {
   const values = { drug: $('#drugInput').value.trim(), gene: $('#geneInput').value.trim(), variant: $('#variantInput').value.trim() };
@@ -222,24 +239,57 @@ function renderMcpResult(data) {
   $('#mcpTrace code').textContent = JSON.stringify(data.trace || [], null, 2);
   $('#mcpRawResult code').textContent = JSON.stringify(data, null, 2);
 }
-async function callMcpTool(event) {
-  event.preventDefault();
+async function invokeMcpTool(argumentsObject, button = $('#mcpRunButton')) {
   if (!mcpState.selected) { toast('Выберите инструмент'); return; }
-  const button = $('#mcpRunButton');
+  const validationError = validateMcpArguments(argumentsObject);
+  if (validationError) {
+    $('#mcpToolResult').innerHTML = `<p class="mcp-result-copy mcp-user-error">${esc(validationError)}</p>`;
+    toast(validationError);
+    return;
+  }
   button.disabled = true;
-  button.querySelector('.button-label').textContent = 'Вызов MCP…';
+  if (button.querySelector('.button-label')) button.querySelector('.button-label').textContent = 'Вызов MCP…';
   try {
-    const response = await fetch('/api/mcp/call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ source:mcpState.source, tool:mcpState.selected.name, arguments:mcpArguments() }) });
+    const response = await fetch('/api/mcp/call', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ source:mcpState.source, tool:mcpState.selected.name, arguments:argumentsObject }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'MCP вернул ошибку');
     renderMcpResult(data);
     document.querySelector('.mcp-inspector').open = true;
   } catch (error) {
-    $('#mcpToolResult').innerHTML = `<p class="mcp-result-copy">Ошибка MCP: ${esc(error.message)}</p>`;
+    $('#mcpToolResult').innerHTML = `<p class="mcp-result-copy mcp-user-error">${esc(error.message)}</p>`;
   } finally {
     button.disabled = false;
-    button.querySelector('.button-label').textContent = 'Вызвать через MCP';
+    if (button.querySelector('.button-label')) button.querySelector('.button-label').textContent = button === $('#mcpRunButton') ? 'Вызвать через MCP' : 'Анализировать текущий отчёт';
   }
+}
+async function callMcpTool(event) {
+  event.preventDefault();
+  await invokeMcpTool(mcpArguments());
+}
+function currentReportMcpArguments(toolName) {
+  const report = state.report;
+  if (!report) return null;
+  const query = report.normalized_query || report.query || {};
+  const faers = report.faers || {};
+  const clinvar = report.clinvar || {};
+  const record = clinvar.records?.[0] || {};
+  if (toolName === 'synthesize_evidence_tool') return {
+    drug: query.drug || '', gene: query.gene || '', variant: query.variant || '',
+    faers_available: faers.status === 'ok', faers_reports: Number(faers.total_reports || 0), faers_serious_rate: Number(faers.serious_rate || 0),
+    clinvar_available: clinvar.status === 'ok', clinvar_records: Number(clinvar.total_records || 0), clinvar_pathogenic_records: Number(clinvar.pathogenic_records || 0),
+    top_reaction: faers.top_reactions?.[0]?.term || '',
+  };
+  if (toolName === 'prioritize_variant_review_tool') return {
+    drug: query.drug || '', gene: query.gene || '', variant: query.variant || record.title || '', classification: record.classification || '', review_status: record.review_status || '', traits: (record.traits || []).join(', '),
+  };
+  return {
+    faers_available: faers.status === 'ok', faers_reports: Number(faers.total_reports || 0), clinvar_available: clinvar.status === 'ok', clinvar_records: Number(clinvar.total_records || 0), has_variant: Boolean(query.variant), has_source_links: Boolean(faers.source && clinvar.source),
+  };
+}
+async function analyzeCurrentReport() {
+  if (!state.report) { toast('Сначала запустите исследование'); setPage('research', 'workspaceGrid'); return; }
+  selectMcpTool('synthesize_evidence_tool');
+  await invokeMcpTool(currentReportMcpArguments('synthesize_evidence_tool'), $('#mcpAnalyzeReport'));
 }
 function selectMcpSource(source) {
   mcpState.source = source;
@@ -292,8 +342,9 @@ window.addEventListener('hashchange', () => setPage(window.location.hash === '#m
 document.querySelectorAll('.quick-chip').forEach((chip) => chip.addEventListener('click', () => { $('#drugInput').value = chip.dataset.drug; $('#geneInput').value = chip.dataset.gene; $('#variantInput').value = chip.dataset.variant || ''; runInvestigation(); }));
 document.querySelectorAll('input[name="mcpSource"]').forEach((input) => input.addEventListener('change', () => selectMcpSource(input.value)));
 $('#mcpToolSearch').addEventListener('input', renderMcpTools);
-$('#mcpToolSelect').addEventListener('change', (event) => { mcpState.selected = mcpState.tools.find((tool) => tool.name === event.target.value) || null; $('#mcpToolDescription').textContent = mcpState.selected ? `${mcpState.selected.name} · ${mcpState.selected.source || 'локальный MCP'}` : 'Инструмент не найден.'; renderMcpFields(); renderMcpToolHelp(); });
+$('#mcpToolSelect').addEventListener('change', (event) => selectMcpTool(event.target.value));
 $('#mcpToolForm').addEventListener('submit', callMcpTool);
 $('#mcpUseResearch').addEventListener('click', prefillMcpFromResearch);
+$('#mcpAnalyzeReport').addEventListener('click', analyzeCurrentReport);
 applyTheme(); applyLanguage(); bindGlare(); setLoading(false);
 loadMcpCatalog();

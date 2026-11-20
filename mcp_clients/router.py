@@ -36,6 +36,10 @@ class MCPClientError(RuntimeError):
     """An expected, user-facing MCP transport or tool error."""
 
 
+class MCPValidationError(MCPClientError):
+    """A tool rejected its arguments before doing any work."""
+
+
 def _jsonable(value: Any) -> Any:
     if value is None or isinstance(value, (str, int, float, bool)):
         return value
@@ -59,6 +63,10 @@ def _tool_name(tool: Any) -> str:
 def _tool_schema(tool: Any) -> dict[str, Any]:
     schema = getattr(tool, "inputSchema", None) or getattr(tool, "input_schema", None) or {}
     return _jsonable(schema)
+
+
+def _field_label(name: str) -> str:
+    return {"drug": "Препарат", "gene": "Ген", "query": "Поисковый запрос", "drug_name": "Название препарата"}.get(name, name.replace("_", " "))
 
 
 def _trace_request(trace: list[dict[str, Any]], request_id: int, method: str, params: dict[str, Any]) -> None:
@@ -155,6 +163,8 @@ async def _invoke_once(source: str, tool_name: str, arguments: dict[str, Any]) -
     trace: list[dict[str, Any]] = []
     server = _source_server(source)
     client_mode = "legacy" if source == "external" else "auto"
+    failure: MCPClientError | None = None
+    response_payload: dict[str, Any] | None = None
     async with Client(server, read_timeout_seconds=12, mode=client_mode) as client:
         request_id = 1
         _trace_request(trace, request_id, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "PharmacoGen", "version": "2.0.0"}})
@@ -167,22 +177,44 @@ async def _invoke_once(source: str, tool_name: str, arguments: dict[str, Any]) -
         selected = next((tool for tool in tools if _tool_name(tool) == tool_name), None)
         if selected is None:
             available = ", ".join(_tool_name(tool) for tool in tools[:20]) or "нет инструментов"
-            raise MCPClientError(f"Инструмент {tool_name} не найден. Доступны: {available}")
-        request_id += 1
-        _trace_request(trace, request_id, "tools/call", {"name": tool_name, "arguments": arguments})
-        try:
-            result = await client.call_tool(tool_name, arguments)
-        except ValueError as exc:
-            _trace_error(trace, request_id, str(exc))
-            raise MCPClientError(str(exc)) from exc
-        _trace_response(trace, request_id, result)
-        return {
-            "source": source,
-            "tool": {"name": _tool_name(selected), "description": getattr(selected, "description", ""), "inputSchema": _tool_schema(selected)},
-            "result": _jsonable(result),
-            "trace": trace,
-            "server": _jsonable(client.server_info),
-        }
+            failure = MCPClientError(f"Инструмент {tool_name} не найден. Доступны: {available}")
+        else:
+            schema = _tool_schema(selected)
+            missing = [name for name in schema.get("required", []) if arguments.get(name) is None or str(arguments.get(name, "")).strip() == ""]
+            if missing:
+                _trace_error(trace, request_id, f"Заполните: {', '.join(_field_label(name) for name in missing)}")
+                failure = MCPValidationError(f"Заполните: {', '.join(_field_label(name) for name in missing)}")
+            else:
+                request_id += 1
+                _trace_request(trace, request_id, "tools/call", {"name": tool_name, "arguments": arguments})
+                try:
+                    result = await client.call_tool(tool_name, arguments)
+                except ValueError as exc:
+                    _trace_error(trace, request_id, str(exc))
+                    failure = MCPValidationError("Проверьте обязательные параметры инструмента.")
+                else:
+                    if getattr(result, "is_error", False):
+                        content = getattr(result, "content", []) or []
+                        raw_message = next((getattr(item, "text", "") for item in content if getattr(item, "text", "")), "")
+                        _trace_error(trace, request_id, raw_message or "Инструмент отклонил параметры.")
+                        if "validation" in raw_message.casefold() or "should have at least" in raw_message.casefold():
+                            failure = MCPValidationError("Проверьте обязательные параметры инструмента.")
+                        else:
+                            failure = MCPClientError(raw_message or "Инструмент отклонил параметры.")
+                    else:
+                        _trace_response(trace, request_id, result)
+                        response_payload = {
+                            "source": source,
+                            "tool": {"name": _tool_name(selected), "description": getattr(selected, "description", ""), "inputSchema": schema},
+                            "result": _jsonable(result),
+                            "trace": trace,
+                            "server": _jsonable(client.server_info),
+                        }
+    if failure:
+        raise failure
+    if response_payload is None:
+        raise MCPClientError("MCP не вернул результат.")
+    return response_payload
 
 
 def _cache_key(source: str, tool_name: str, arguments: dict[str, Any]) -> str:
@@ -205,6 +237,8 @@ async def _invoke_with_retry(source: str, tool_name: str, arguments: dict[str, A
             with _cache_lock:
                 _cache[key] = (time.monotonic() + CACHE_TTL_SECONDS, result)
             return result
+        except MCPValidationError:
+            raise
         except (asyncio.TimeoutError, OSError, MCPClientError) as exc:
             last_error = exc
             if attempt == 0:
@@ -224,15 +258,15 @@ def list_mcp_catalog() -> dict[str, Any]:
     return {
         "sources": [
             {"id": "stdio", "title": "Локальный stdio", "description": "Дочерний Python-процесс и stdin/stdout JSON-RPC."},
-            {"id": "network", "title": "Локальный сетевой", "description": "MCP Streamable HTTP на http://127.0.0.1:8000/mcp; четыре фармакогенетических инструмента."},
+            {"id": "network", "title": "Локальный сетевой", "description": "MCP Streamable HTTP на http://127.0.0.1:8000/mcp; три аналитических инструмента."},
             {"id": "external", "title": "Внешний medical-mcp", "description": "Пакет из каталога Glama с FDA, PubMed и RxNorm."},
         ],
         "local_tools": [
-            {"name": f"{item['name']}_tool", "title": item["title"], "category": item["category"], "inputSchema": {"type": "object", "properties": item["parameters"]}, "source": item["source"]}
+            {"name": f"{item['name']}_tool", "title": item["title"], "category": item["category"], "inputSchema": {"type": "object", "properties": item["parameters"], "required": item.get("required", [])}, "source": item["source"]}
             for item in list_pharmacogenetic_tools()
         ],
         "external_tools": [
-            {"name": "search-medical-literature", "title": "Поиск медицинской литературы", "category": "внешний источник", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "Название препарата, гена или клинический вопрос"}, "max_results": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}}}, "source": "https://glama.ai/mcp/servers/JamesANZ/medical-mcp"},
-            {"name": "get-drug-details", "title": "Данные о препарате FDA", "category": "внешний источник", "inputSchema": {"type": "object", "properties": {"drug_name": {"type": "string"}}}, "source": "https://glama.ai/mcp/servers/JamesANZ/medical-mcp"},
+            {"name": "search-medical-literature", "title": "Поиск медицинской литературы", "category": "внешний источник", "inputSchema": {"type": "object", "properties": {"query": {"type": "string", "description": "Название препарата, гена или клинический вопрос"}, "max_results": {"type": "integer", "minimum": 1, "maximum": 10, "default": 5}}, "required": ["query"]}, "source": "https://glama.ai/mcp/servers/JamesANZ/medical-mcp"},
+            {"name": "get-drug-details", "title": "Данные о препарате FDA", "category": "внешний источник", "inputSchema": {"type": "object", "properties": {"drug_name": {"type": "string"}}, "required": ["drug_name"]}, "source": "https://glama.ai/mcp/servers/JamesANZ/medical-mcp"},
         ],
     }
