@@ -401,6 +401,13 @@ h1 { max-width: 850px; margin-bottom: 22px; font-size: clamp(3.3rem, 5.8vw, 6.35
 .dossier-loading { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: 11px; }
 .dossier-loading span { width: 10px; height: 10px; border: 2px solid var(--line-strong); border-top-color: var(--accent); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+.mcp-manual-mode { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-soft); }
+.mcp-manual-mode summary { display: flex; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; list-style: none; padding: 13px 15px; color: var(--text); font-size: 12px; font-weight: 750; }
+.mcp-manual-mode summary::-webkit-details-marker { display: none; }
+.mcp-manual-mode summary::after { content: '+'; color: var(--quiet); font-size: 16px; }
+.mcp-manual-mode[open] summary::after { content: '−'; }
+.mcp-manual-mode summary small { margin-left: auto; color: var(--quiet); font-size: 10px; font-weight: 500; }
+.mcp-manual-mode .mcp-dynamic-form { border-top: 1px solid var(--line); padding: 16px; }
 
 @media (max-width: 580px) {
   .mcp-detail-grid, .mcp-count-grid { grid-template-columns: 1fr; }
@@ -409,6 +416,8 @@ h1 { max-width: 850px; margin-bottom: 22px; font-size: clamp(3.3rem, 5.8vw, 6.35
   .mcp-dossier-card { grid-template-columns: 1fr; }
   .dossier-button { width: 100%; }
   .dossier-result-grid { grid-template-columns: 1fr; }
+  .mcp-manual-mode summary { align-items: flex-start; flex-wrap: wrap; }
+  .mcp-manual-mode summary small { width: 100%; margin-left: 0; }
 }
 
 /* Structured evidence route and contextual MCP guidance. */
