@@ -57,6 +57,44 @@ const localTools = [
       required: [],
     },
   },
+  {
+    name: 'search_pharmacogenetic_literature_tool',
+    title: 'Поиск фармакогенетической литературы',
+    category: 'PubMed / NCBI',
+    source: 'PubMed / NCBI через MCP',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        drug: { type: 'string', description: 'Препарат' },
+        gene: { type: 'string', description: 'Символ гена' },
+        variant: { type: 'string', description: 'Вариант или генотип' },
+        max_results: { type: 'integer', minimum: 1, maximum: 10, default: 5, unit: 'публикаций' },
+      },
+      required: ['drug', 'gene'],
+    },
+  },
+  {
+    name: 'formulate_hypotheses_tool',
+    title: 'Формирование проверяемых гипотез',
+    category: 'синтез исследования',
+    source: 'серверная функция PharmacoGen',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        drug: { type: 'string', description: 'Препарат' },
+        gene: { type: 'string', description: 'Символ гена' },
+        variant: { type: 'string', description: 'Вариант или генотип' },
+        faers_reports: { type: 'integer', minimum: 0, maximum: 1000000, default: 0, unit: 'сообщений' },
+        faers_serious_rate: { type: 'number', minimum: 0, maximum: 1, default: 0, unit: 'доля' },
+        clinvar_records: { type: 'integer', minimum: 0, maximum: 1000000, default: 0, unit: 'записей' },
+        clinvar_pathogenic_records: { type: 'integer', minimum: 0, maximum: 1000000, default: 0, unit: 'записей' },
+        literature_count: { type: 'integer', minimum: 0, maximum: 1000000, default: 0, unit: 'публикаций' },
+        top_reaction: { type: 'string', description: 'Самая частая реакция' },
+        literature_titles: { type: 'string', description: 'Заголовки найденных публикаций' },
+      },
+      required: ['drug', 'gene'],
+    },
+  },
 ];
 
 exports.handler = async function handler(event) {

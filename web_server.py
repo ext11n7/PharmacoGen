@@ -119,6 +119,11 @@ def build_mcp_dossier(report: dict[str, object], source: str = "stdio") -> dict[
 
     synthesis = run_stage("synthesize_evidence_tool", synthesis_arguments, "Синтез источников")
     audit = run_stage("audit_evidence_quality_tool", audit_arguments, "Контроль качества")
+    literature = run_stage(
+        "search_pharmacogenetic_literature_tool",
+        {"drug": synthesis_arguments["drug"], "gene": synthesis_arguments["gene"], "variant": synthesis_arguments["variant"], "max_results": 5},
+        "Поиск публикаций",
+    )
     prioritized = []
     for index, record in enumerate(records, start=1):
         variant = str(record.get("title") or record.get("accession") or synthesis_arguments["variant"] or "")
@@ -134,9 +139,30 @@ def build_mcp_dossier(report: dict[str, object], source: str = "stdio") -> dict[
             },
             f"Приоритет варианта {index}",
         ))
+    literature_details = literature.get("details", {}) if isinstance(literature, dict) else {}
+    literature_records = literature_details.get("records", []) if isinstance(literature_details, dict) else []
+    literature_titles = "; ".join(str(item.get("title", "")) for item in literature_records[:3] if isinstance(item, dict) and item.get("title"))
+    hypotheses = run_stage(
+        "formulate_hypotheses_tool",
+        {
+            "drug": synthesis_arguments["drug"],
+            "gene": synthesis_arguments["gene"],
+            "variant": synthesis_arguments["variant"],
+            "faers_reports": synthesis_arguments["faers_reports"],
+            "faers_serious_rate": synthesis_arguments["faers_serious_rate"],
+            "clinvar_records": synthesis_arguments["clinvar_records"],
+            "clinvar_pathogenic_records": synthesis_arguments["clinvar_pathogenic_records"],
+            "literature_count": min(int(literature_details.get("total", 0) or 0), 1_000_000) if isinstance(literature_details, dict) else 0,
+            "top_reaction": synthesis_arguments["top_reaction"],
+            "literature_titles": literature_titles[:240],
+        },
+        "Формирование гипотез",
+    )
     next_steps = list(synthesis.get("next_steps", [])) + list(audit.get("next_steps", []))
+    next_steps.extend(literature.get("next_steps", []))
     for item in prioritized:
         next_steps.extend(item.get("next_steps", []))
+    next_steps.extend(hypotheses.get("next_steps", []))
     unique_steps = list(dict.fromkeys(str(item) for item in next_steps if item))[:8]
     return {
         "status": "ok",
@@ -144,7 +170,9 @@ def build_mcp_dossier(report: dict[str, object], source: str = "stdio") -> dict[
         "query": synthesis_arguments,
         "synthesis": synthesis,
         "quality": audit,
+        "literature": literature,
         "prioritized_variants": prioritized,
+        "hypotheses": hypotheses,
         "next_steps": unique_steps,
         "limitations": [
             "MCP анализирует собранный срез и не заменяет чтение исходных записей.",

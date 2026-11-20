@@ -14,8 +14,10 @@ from .pharmacogenetic_tools import (
     Rate,
     ReportCount,
     audit_evidence_quality,
+    formulate_hypotheses,
     list_pharmacogenetic_tools,
     prioritize_variant_review,
+    search_pharmacogenetic_literature,
     synthesize_evidence,
 )
 
@@ -70,6 +72,34 @@ def audit_evidence_quality_tool(
 ) -> dict:
     """Проверить полноту данных перед исследовательским выводом."""
     return audit_evidence_quality(faers_available, faers_reports, clinvar_available, clinvar_records, has_variant, has_source_links)
+
+
+@mcp.tool()
+def search_pharmacogenetic_literature_tool(
+    drug: DrugName,
+    gene: GeneSymbol,
+    variant: OptionalText = "",
+    max_results: int = 5,
+) -> dict:
+    """Найти публикации PubMed для продолжения проверки гипотезы."""
+    return search_pharmacogenetic_literature(drug, gene, variant, max_results)
+
+
+@mcp.tool()
+def formulate_hypotheses_tool(
+    drug: DrugName,
+    gene: GeneSymbol,
+    variant: OptionalText = "",
+    faers_reports: ReportCount = 0,
+    faers_serious_rate: Rate = 0,
+    clinvar_records: ReportCount = 0,
+    clinvar_pathogenic_records: ReportCount = 0,
+    literature_count: ReportCount = 0,
+    top_reaction: OptionalText = "",
+    literature_titles: OptionalText = "",
+) -> dict:
+    """Сформировать проверяемые гипотезы по собранному срезу."""
+    return formulate_hypotheses(drug, gene, variant, faers_reports, faers_serious_rate, clinvar_records, clinvar_pathogenic_records, literature_count, top_reaction, literature_titles)
 
 
 @mcp.tool()
