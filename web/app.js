@@ -236,15 +236,18 @@ $('#languageSelect').addEventListener('change', (event) => { state.lang = event.
 const floatingNav = $('#floatingNav');
 const floatingNavToggle = $('#floatingNavToggle');
 const floatingNavItems = [...document.querySelectorAll('.floating-nav-item')];
-const scrollToNavTarget = (targetId) => {
-  const target = document.getElementById(targetId);
-  if (!target) return;
-  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  floatingNavItems.forEach((item) => item.classList.toggle('active', item.dataset.scrollTarget === targetId));
+const pages = { research: $('#researchPage'), mcp: $('#mcpPage') };
+const setPage = (page, targetId, updateHash = true) => {
+  const nextPage = pages[page] ? page : 'research';
+  Object.entries(pages).forEach(([name, node]) => node.classList.toggle('hidden', name !== nextPage));
+  floatingNavItems.forEach((item) => item.classList.toggle('active', item.dataset.pageTarget === nextPage && (nextPage === 'mcp' || item.dataset.scrollTarget === targetId || (!targetId && item.dataset.scrollTarget === 'workspaceGrid'))));
+  if (updateHash) history.replaceState(null, '', nextPage === 'mcp' ? '#mcp' : '#research');
   document.body.classList.remove('nav-open');
   floatingNavToggle.setAttribute('aria-expanded', 'false');
+  const target = document.getElementById(targetId || (nextPage === 'mcp' ? 'mcpPage' : 'workspaceGrid'));
+  if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
-floatingNavItems.forEach((item) => item.addEventListener('click', () => scrollToNavTarget(item.dataset.scrollTarget)));
+floatingNavItems.forEach((item) => item.addEventListener('click', () => setPage(item.dataset.pageTarget || 'research', item.dataset.scrollTarget)));
 floatingNavToggle.addEventListener('click', () => {
   const expanded = !document.body.classList.contains('nav-open');
   document.body.classList.toggle('nav-open', expanded);
@@ -258,9 +261,13 @@ document.addEventListener('click', (event) => {
 });
 const navObserver = new IntersectionObserver((entries) => {
   const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-  if (visible) floatingNavItems.forEach((item) => item.classList.toggle('active', item.dataset.scrollTarget === visible.target.id));
+  if (visible && !pages.mcp.classList.contains('hidden')) return;
+  if (visible) floatingNavItems.forEach((item) => item.classList.toggle('active', item.dataset.pageTarget === 'research' && item.dataset.scrollTarget === visible.target.id));
 }, { rootMargin: '-35% 0px -55% 0px', threshold: [0, .2, .5] });
-['workspaceGrid', 'historySection', 'sourcesList', 'mcpLab'].forEach((id) => { const target = document.getElementById(id); if (target) navObserver.observe(target); });
+['workspaceGrid', 'historySection', 'sourcesList'].forEach((id) => { const target = document.getElementById(id); if (target) navObserver.observe(target); });
+const initialPage = window.location.hash === '#mcp' ? 'mcp' : 'research';
+setPage(initialPage, initialPage === 'mcp' ? 'mcpPage' : null, false);
+window.addEventListener('hashchange', () => setPage(window.location.hash === '#mcp' ? 'mcp' : 'research', null, false));
 document.querySelectorAll('.quick-chip').forEach((chip) => chip.addEventListener('click', () => { $('#drugInput').value = chip.dataset.drug; $('#geneInput').value = chip.dataset.gene; $('#variantInput').value = chip.dataset.variant || ''; runInvestigation(); }));
 document.querySelectorAll('input[name="mcpSource"]').forEach((input) => input.addEventListener('change', () => selectMcpSource(input.value)));
 $('#mcpToolSearch').addEventListener('input', renderMcpTools);
