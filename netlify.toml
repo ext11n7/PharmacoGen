@@ -13,6 +13,16 @@
   status = 200
 
 [[redirects]]
+  from = "/api/mcp/catalog"
+  to = "/.netlify/functions/mcp-catalog"
+  status = 200
+
+[[redirects]]
+  from = "/api/mcp/call"
+  to = "/.netlify/functions/mcp-call"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

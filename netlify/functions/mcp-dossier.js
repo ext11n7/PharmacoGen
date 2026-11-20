@@ -153,3 +153,7 @@ exports.handler = async function handler(event) {
     return { statusCode: 400, headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ error: error.message }) };
   }
 };
+
+exports.synthesizeEvidence = synthesize;
+exports.auditEvidence = audit;
+exports.prioritizeVariant = prioritize;
