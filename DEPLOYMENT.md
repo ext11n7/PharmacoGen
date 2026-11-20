@@ -2,7 +2,7 @@
 
 ## Netlify
 
-Проект подготовлен под Netlify: папка `web` публикуется как статический сайт, а `netlify/functions/investigate.js` работает как серверная функция для запросов к FAERS и ClinVar.
+Проект подготовлен под Netlify: папка `web` публикуется как статический сайт, `netlify/functions/investigate.js` собирает данные FAERS и ClinVar, а `netlify/functions/mcp-dossier.js` запускает многоэтапное исследовательское досье поверх готового отчёта.
 
 1. Откройте [Netlify](https://app.netlify.com/) и выберите `Add new site` → `Import an existing project`.
 2. Подключите репозиторий с этой папкой или загрузите проект через Netlify CLI.
@@ -17,7 +17,7 @@ netlify init
 netlify deploy --prod
 ```
 
-`netlify.toml` уже задаёт `web` как publish-директорию, подключает `netlify/functions` и перенаправляет `/api/investigate` в функцию.
+`netlify.toml` уже задаёт `web` как publish-директорию, подключает `netlify/functions` и перенаправляет `/api/investigate` и `/api/mcp/dossier` в функции. На опубликованном сайте досье выполняется serverless-функцией; локально доступны полноценные MCP-транспорты stdio и network.
 
 После публикации проверьте адрес сайта и кнопку «Собрать доказательства». Для Netlify не нужны отдельные ключи API: используются открытые запросы к openFDA и NCBI.
 

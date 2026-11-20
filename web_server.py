@@ -50,6 +50,111 @@ def _validate_mcp_arguments(source: str, tool: str, arguments: dict[str, object]
             raise ValueError(f"Поле «{_mcp_field_label(name)}» не может быть больше {field['maximum']}")
 
 
+def _extract_mcp_result(payload: dict[str, object]) -> dict[str, object]:
+    result = payload.get("result") or {}
+    if not isinstance(result, dict):
+        return {"summary": "MCP вернул неожиданный формат ответа."}
+    structured = result.get("structuredContent") or result.get("structured_content")
+    if isinstance(structured, dict):
+        return structured
+    for item in result.get("content", []) if isinstance(result.get("content"), list) else []:
+        if isinstance(item, dict) and item.get("type") == "text" and item.get("text"):
+            try:
+                parsed = json.loads(str(item["text"]))
+            except json.JSONDecodeError:
+                return {"summary": str(item["text"])}
+            return parsed if isinstance(parsed, dict) else {"summary": str(parsed)}
+    return result
+
+
+def _report_mcp_arguments(report: dict[str, object]) -> tuple[dict[str, object], dict[str, object], list[dict[str, object]]]:
+    query = report.get("normalized_query") or report.get("query") or {}
+    faers = report.get("faers") or {}
+    clinvar = report.get("clinvar") or {}
+    if not isinstance(query, dict) or not isinstance(faers, dict) or not isinstance(clinvar, dict):
+        raise ValueError("Отчёт исследования имеет неполный формат")
+    drug, gene = str(query.get("drug", "")).strip(), str(query.get("gene", "")).strip()
+    if not drug or not gene:
+        raise ValueError("В отчёте нет препарата или гена")
+    reactions = faers.get("top_reactions") if isinstance(faers.get("top_reactions"), list) else []
+    records = clinvar.get("records") if isinstance(clinvar.get("records"), list) else []
+    synthesis = {
+        "drug": drug,
+        "gene": gene,
+        "variant": str(query.get("variant", "")),
+        "faers_available": faers.get("status") == "ok",
+        "faers_reports": int(faers.get("total_reports") or 0),
+        "faers_serious_rate": float(faers.get("serious_rate") or 0),
+        "clinvar_available": clinvar.get("status") == "ok",
+        "clinvar_records": int(clinvar.get("total_records") or 0),
+        "clinvar_pathogenic_records": int(clinvar.get("pathogenic_records") or 0),
+        "top_reaction": str(reactions[0].get("term", "")) if reactions and isinstance(reactions[0], dict) else "",
+    }
+    audit = {
+        "faers_available": synthesis["faers_available"],
+        "faers_reports": synthesis["faers_reports"],
+        "clinvar_available": synthesis["clinvar_available"],
+        "clinvar_records": synthesis["clinvar_records"],
+        "has_variant": bool(synthesis["variant"]),
+        "has_source_links": bool(faers.get("source") and clinvar.get("source")),
+    }
+    return synthesis, audit, [item for item in records[:3] if isinstance(item, dict)]
+
+
+def build_mcp_dossier(report: dict[str, object], source: str = "stdio") -> dict[str, object]:
+    """Run a multi-step MCP workflow over one already collected report."""
+    if source not in {"stdio", "network"}:
+        raise ValueError("Для досье выберите локальный stdio или локальный сетевой MCP")
+    synthesis_arguments, audit_arguments, records = _report_mcp_arguments(report)
+    calls: list[dict[str, object]] = []
+
+    def run_stage(tool: str, arguments: dict[str, object], title: str) -> dict[str, object]:
+        try:
+            response = call_mcp_tool(source, tool, arguments)
+            calls.append({"title": title, "tool": tool, "status": "done", "trace": response.get("trace", [])})
+            return _extract_mcp_result(response)
+        except MCPClientError as exc:
+            calls.append({"title": title, "tool": tool, "status": "error", "error": str(exc), "trace": []})
+            return {"summary": "Этап не выполнен", "error": str(exc), "next_steps": []}
+
+    synthesis = run_stage("synthesize_evidence_tool", synthesis_arguments, "Синтез источников")
+    audit = run_stage("audit_evidence_quality_tool", audit_arguments, "Контроль качества")
+    prioritized = []
+    for index, record in enumerate(records, start=1):
+        variant = str(record.get("title") or record.get("accession") or synthesis_arguments["variant"] or "")
+        prioritized.append(run_stage(
+            "prioritize_variant_review_tool",
+            {
+                "drug": synthesis_arguments["drug"],
+                "gene": synthesis_arguments["gene"],
+                "variant": variant,
+                "classification": str(record.get("classification", "")),
+                "review_status": str(record.get("review_status", "")),
+                "traits": ", ".join(str(item) for item in record.get("traits", []) if item),
+            },
+            f"Приоритет варианта {index}",
+        ))
+    next_steps = list(synthesis.get("next_steps", [])) + list(audit.get("next_steps", []))
+    for item in prioritized:
+        next_steps.extend(item.get("next_steps", []))
+    unique_steps = list(dict.fromkeys(str(item) for item in next_steps if item))[:8]
+    return {
+        "status": "ok",
+        "workflow": {"title": "Исследовательское досье", "stages": calls, "completed": sum(stage["status"] == "done" for stage in calls), "total": len(calls)},
+        "query": synthesis_arguments,
+        "synthesis": synthesis,
+        "quality": audit,
+        "prioritized_variants": prioritized,
+        "next_steps": unique_steps,
+        "limitations": [
+            "MCP анализирует собранный срез и не заменяет чтение исходных записей.",
+            "FAERS содержит спонтанные сообщения: их количество не равно частоте и не доказывает причинность.",
+            "ClinVar-классификация не доказывает фармакогенетический эффект без дополнительного контекста.",
+        ],
+        "trace": [packet for stage in calls for packet in stage.get("trace", [])],
+    }
+
+
 class Handler(BaseHTTPRequestHandler):
     def _send(self, body: bytes, content_type: str, status: int = 200) -> None:
         self.send_response(status)
@@ -91,6 +196,9 @@ class Handler(BaseHTTPRequestHandler):
         path = urlparse(self.path).path
         if path == "/api/mcp/call":
             self._handle_mcp_call()
+            return
+        if path == "/api/mcp/dossier":
+            self._handle_mcp_dossier()
             return
         if path != "/api/investigate":
             self._send(b"Not found", "text/plain; charset=utf-8", 404)
@@ -134,6 +242,23 @@ class Handler(BaseHTTPRequestHandler):
             self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
         except Exception as exc:
             self._send(json.dumps({"error": f"Ошибка MCP: {exc}"}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 502)
+
+    def _handle_mcp_dossier(self) -> None:
+        try:
+            length = int(self.headers.get("Content-Length", "0"))
+            payload = json.loads(self.rfile.read(length) or b"{}")
+            report = payload.get("report")
+            source = str(payload.get("source", "stdio")).strip()
+            if not isinstance(report, dict):
+                raise ValueError("Передайте готовый отчёт исследования")
+            dossier = build_mcp_dossier(report, source)
+            self._send(json.dumps(dossier, ensure_ascii=False).encode(), "application/json; charset=utf-8")
+        except ValueError as exc:
+            self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
+        except MCPClientError as exc:
+            self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 502)
+        except Exception as exc:
+            self._send(json.dumps({"error": f"Не удалось собрать MCP-досье: {exc}"}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 502)
 
     def log_message(self, format: str, *args: object) -> None:
         print(f"[web] {self.address_string()} - {format % args}")

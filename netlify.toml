@@ -8,6 +8,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/mcp/dossier"
+  to = "/.netlify/functions/mcp-dossier"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
