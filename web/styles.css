@@ -528,3 +528,8 @@ html { scroll-behavior: smooth; }
   .floating-nav-item { padding: 9px 10px; font-size: 11px; white-space: nowrap; }
   #workspaceGrid, #historySection, #sourcesList, #mcpLab { scroll-margin-top: 82px; }
 }
+
+/* Reserve a real gutter for the expanded desktop navigation. */
+@media (min-width: 1181px) {
+  main { padding-left: 250px; }
+}
