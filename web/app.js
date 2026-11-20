@@ -200,11 +200,25 @@ function extractMcpValue(data) {
   if (textBlock) { try { return JSON.parse(textBlock.text); } catch { return { text: textBlock.text }; } }
   return result;
 }
+function mcpReadableValue(value) {
+  if (value === null || value === undefined || value === '') return '—';
+  if (Array.isArray(value)) return value.map((item) => mcpReadableValue(item)).join(', ');
+  if (typeof value === 'object') return Object.entries(value).map(([key, item]) => `${key}: ${mcpReadableValue(item)}`).join(' · ');
+  return String(value);
+}
+function mcpDetailsMarkup(result) {
+  const details = result?.details || {};
+  if (details.requests?.length) return `<div class="mcp-request-list">${details.requests.map((request) => `<div class="mcp-request-row"><div><strong>${esc(request.source)}</strong><span>${esc(request.purpose)}</span></div><code>${esc(request.query)}</code>${request.max_results ? `<small>до ${esc(request.max_results)} публикаций</small>` : ''}</div>`).join('')}</div>`;
+  if (details.counts) return `<div class="mcp-count-grid">${Object.entries(details.counts).map(([key, item]) => `<div><span>${esc(key)}</span><strong>${esc(item)}</strong></div>`).join('')}</div>`;
+  const visible = Object.entries(details).filter(([key]) => !['faers_query', 'clinvar_query', 'pubmed_query'].includes(key));
+  return visible.length ? `<div class="mcp-detail-grid">${visible.map(([key, item]) => `<div><span>${esc(key.replaceAll('_', ' '))}</span><strong>${esc(mcpReadableValue(item))}</strong></div>`).join('')}</div>` : '';
+}
 function renderMcpResult(data) {
   const value = extractMcpValue(data);
   const result = value?.result || value;
   const first = result?.value !== undefined ? result : null;
-  $('#mcpToolResult').innerHTML = `<div class="mcp-result-head"><div><strong>${esc(data.tool?.name || mcpState.selected?.name || 'MCP')}</strong><small>${esc(data.source)}${data.cache_hit ? ' · кэш' : ' · свежий вызов'}</small></div><span class="mcp-cache">${data.cache_hit ? 'HIT' : 'MISS'}</span></div>${first ? `<div class="mcp-result-value">${esc(first.value)} <small>${esc(first.unit || '')}</small></div><span class="mcp-result-category ${esc(first.risk_color || 'yellow')}">${esc(first.category || 'результат')}</span><p class="mcp-result-copy">${esc(first.interpretation || '')}</p><p class="mcp-result-copy">${Object.entries(first.components || {}).map(([key, item]) => `${esc(key)}: ${esc(item)}`).join(' · ')}</p>` : `<p class="mcp-result-copy">${esc(JSON.stringify(result, null, 2))}</p>`}`;
+  const readableBody = first ? `<div class="mcp-result-value">${esc(first.value)} <small>${esc(first.unit || '')}</small></div><span class="mcp-result-category ${esc(first.risk_color || 'yellow')}">${esc(first.category || 'результат')}</span><p class="mcp-result-copy">${esc(first.interpretation || '')}</p><p class="mcp-result-copy">${Object.entries(first.components || {}).map(([key, item]) => `${esc(key)}: ${esc(item)}`).join(' · ')}</p>` : `<div class="mcp-result-summary">${esc(result?.summary || result?.text || 'Ответ получен')}</div>${mcpDetailsMarkup(result)}${result?.next_step ? `<div class="mcp-result-next"><span>СЛЕДУЮЩИЙ ШАГ</span><p>${esc(result.next_step)}</p></div>` : ''}${result?.disclaimer ? `<p class="mcp-result-disclaimer">${esc(result.disclaimer)}</p>` : ''}`;
+  $('#mcpToolResult').innerHTML = `<div class="mcp-result-head"><div><strong>${esc(data.tool?.name || mcpState.selected?.name || 'MCP')}</strong><small>${esc(data.source)}${data.cache_hit ? ' · кэш' : ' · свежий вызов'}</small></div><span class="mcp-cache">${data.cache_hit ? 'HIT' : 'MISS'}</span></div>${readableBody}`;
   $('#mcpTrace code').textContent = JSON.stringify(data.trace || [], null, 2);
   $('#mcpRawResult code').textContent = JSON.stringify(data, null, 2);
 }

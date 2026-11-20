@@ -362,6 +362,27 @@ h1 { max-width: 850px; margin-bottom: 22px; font-size: clamp(3.3rem, 5.8vw, 6.35
   .mcp-live-state { align-self: flex-start; }
 }
 
+.mcp-result-summary { margin-top: 16px; color: var(--text); font-size: 16px; font-weight: 800; line-height: 1.25; }
+.mcp-detail-grid, .mcp-count-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 14px; }
+.mcp-detail-grid > div, .mcp-count-grid > div { display: grid; gap: 5px; border: 1px solid var(--line); border-radius: 7px; padding: 9px; background: var(--surface-soft); }
+.mcp-detail-grid span, .mcp-count-grid span { color: var(--quiet); font-size: 9px; text-transform: uppercase; letter-spacing: .06em; }
+.mcp-detail-grid strong, .mcp-count-grid strong { color: var(--text); font-size: 11px; line-height: 1.35; overflow-wrap: anywhere; }
+.mcp-request-list { display: grid; gap: 7px; margin-top: 14px; }
+.mcp-request-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1fr) auto; align-items: center; gap: 9px; border-top: 1px solid var(--line); padding-top: 9px; }
+.mcp-request-row > div { display: grid; gap: 3px; }
+.mcp-request-row strong { color: var(--text); font-size: 11px; }
+.mcp-request-row span, .mcp-request-row small { color: var(--muted); font-size: 9px; line-height: 1.35; }
+.mcp-request-row code { overflow-wrap: anywhere; color: var(--text); font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; }
+.mcp-result-next { margin-top: 14px; border-left: 2px solid var(--accent); padding: 2px 0 2px 10px; }
+.mcp-result-next span { color: var(--quiet); font-size: 9px; font-weight: 800; letter-spacing: .08em; }
+.mcp-result-next p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.45; }
+.mcp-result-disclaimer { margin: 14px 0 0; color: var(--quiet); font-size: 9px; line-height: 1.45; }
+
+@media (max-width: 580px) {
+  .mcp-detail-grid, .mcp-count-grid { grid-template-columns: 1fr; }
+  .mcp-request-row { grid-template-columns: 1fr; gap: 5px; }
+}
+
 /* Structured evidence route and contextual MCP guidance. */
 .report-network { margin-top: 24px; border: 1px solid var(--line); border-radius: 14px; padding: 24px 26px 20px; background: var(--surface-soft); }
 .network-map-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; }
