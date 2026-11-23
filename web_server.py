@@ -291,7 +291,11 @@ class Handler(BaseHTTPRequestHandler):
             source = str(payload.get("source", "stdio")).strip()
             if not isinstance(report, dict):
                 raise ValueError("Передайте готовый отчёт исследования")
-            dossier = build_mcp_dossier(report, source)
+            if source not in {"stdio", "network"}:
+                raise ValueError("Выберите локальный MCP-транспорт")
+            query, _, _ = _report_mcp_arguments(report)
+            response = call_mcp_tool(source, "search_pharmacogenetic_literature_tool", {"drug": query["drug"], "gene": query["gene"], "variant": query["variant"], "max_results": 5})
+            dossier = {"status": "ok", "literature": _extract_mcp_result(response), "trace": response.get("trace", []), "transport": source}
             self._send(json.dumps(dossier, ensure_ascii=False).encode(), "application/json; charset=utf-8")
         except ValueError as exc:
             self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)

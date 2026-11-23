@@ -5,7 +5,14 @@ from mcp import Client
 from mcp.client.stdio import StdioServerParameters
 
 from mcp_servers.pharmacogenetic_tools import audit_evidence_quality, formulate_hypotheses, prioritize_variant_review, synthesize_evidence
-from mcp_clients.router import MCPValidationError, call_mcp_tool, list_mcp_catalog
+from mcp_clients.router import MCPValidationError, _cacheable_response, call_mcp_tool, list_mcp_catalog
+
+
+def test_unavailable_source_is_not_cached():
+    unavailable = {"result": {"structuredContent": {"details": {"status": "unavailable", "error": "HTTP 429"}}}}
+    available = {"result": {"structuredContent": {"details": {"status": "ok", "total": 0}}}}
+    assert not _cacheable_response(unavailable)
+    assert _cacheable_response(available)
 
 
 def test_mcp_tools_analyze_existing_evidence():

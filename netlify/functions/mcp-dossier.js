@@ -158,50 +158,20 @@ exports.handler = async function handler(event) {
     const report = payload.report;
     if (!report || typeof report !== 'object') throw new Error('Передайте готовый отчёт исследования');
     const input = reportArguments(report);
-    const synthesis = synthesize(input.synthesis);
-    const quality = audit({
-      ...input.synthesis,
-      has_variant: Boolean(input.synthesis.variant),
-      has_source_links: Boolean(input.faers.source && input.clinvar.source),
-    });
     const literature = await searchLiterature(input.synthesis.drug, input.synthesis.gene, input.synthesis.variant, 5);
-    const prioritized = input.records.map((record, index) => ({
-      ...prioritize({
-        variant: record.title || record.accession || input.synthesis.variant,
-        classification: record.classification,
-        review_status: record.review_status,
-      }),
-      stage: makeStage(`Приоритет варианта ${index + 1}`, 'prioritize_variant_review_tool', 'Вариант направлен на ручную проверку.'),
-    }));
-    const hypotheses = { summary: 'Исследовательский вопрос подготовлен для проверки по источникам.', details: { hypotheses: [{ type: 'вопрос для исследования', statement: `Связан ли ${input.synthesis.gene}${input.synthesis.variant ? ` (${input.synthesis.variant})` : ''} с ответом на ${input.synthesis.drug}?`, confidence: 'не оценена', basis: 'Ответ требует проверки отдельных публикаций и их методов. Совпадение поисковых терминов не доказывает связь.', next_step: 'Открыть найденные публикации и проверить результаты, участников и конкретный вариант.' }] }, next_steps: ['Проверить результаты и методы найденных публикаций.'] };
-    const stages = [
-      makeStage('Синтез источников', 'synthesize_evidence_tool', 'Сводка FAERS и ClinVar сопоставлена.'),
-      makeStage('Контроль качества', 'audit_evidence_quality_tool', quality.summary),
-      makeStage('Поиск публикаций', 'search_pharmacogenetic_literature_tool', literature.summary),
-      ...prioritized.map((item) => item.stage),
-      makeStage('Формирование гипотез', 'formulate_hypotheses_tool', hypotheses.summary),
-    ];
-    const nextSteps = [...synthesis.next_steps, ...quality.next_steps, ...literature.next_steps, ...prioritized.flatMap((item) => item.next_steps), ...hypotheses.next_steps];
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
       body: JSON.stringify({
         status: 'ok',
         transport: 'netlify-function',
-        workflow: { title: 'Исследовательское досье', stages, completed: stages.length, total: stages.length },
         query: input.query,
-        synthesis,
-        quality,
         literature,
-        prioritized_variants: prioritized.map(({ stage, ...item }) => item),
-        hypotheses,
-        next_steps: [...new Set(nextSteps)].slice(0, 8),
         limitations: [
-          'На Netlify досье собирается серверной функцией по уже загруженному отчёту; локальный режим дополнительно демонстрирует настоящий MCP-транспорт stdio/network.',
-          'FAERS содержит спонтанные сообщения: их количество не равно частоте и не доказывает причинность.',
-          'ClinVar-классификация не доказывает фармакогенетический эффект без дополнительного контекста.',
+          'На Netlify поиск PubMed выполняется серверной функцией; MCP доступен при локальном запуске.',
+          'Совпадение поискового запроса не означает, что публикация подтверждает связь.',
         ],
-        trace: stages.flatMap((stage) => stage.trace),
+        trace: [],
       }),
     };
   } catch (error) {

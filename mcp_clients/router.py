@@ -221,6 +221,23 @@ def _cache_key(source: str, tool_name: str, arguments: dict[str, Any]) -> str:
     return json.dumps([source, tool_name, arguments], ensure_ascii=False, sort_keys=True)
 
 
+def _cacheable_response(response: dict[str, Any]) -> bool:
+    result = response.get("result") or {}
+    if not isinstance(result, dict) or result.get("isError") or result.get("is_error"):
+        return False
+    structured = result.get("structuredContent") or result.get("structured_content")
+    if not isinstance(structured, dict):
+        for block in result.get("content", []):
+            if isinstance(block, dict) and block.get("type") == "text":
+                try:
+                    structured = json.loads(block.get("text", ""))
+                except (TypeError, ValueError):
+                    pass
+                break
+    details = structured.get("details", {}) if isinstance(structured, dict) else {}
+    return not (isinstance(details, dict) and details.get("status") in {"error", "unavailable"})
+
+
 async def _invoke_with_retry(source: str, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
     key = _cache_key(source, tool_name, arguments)
     with _cache_lock:
@@ -234,8 +251,9 @@ async def _invoke_with_retry(source: str, tool_name: str, arguments: dict[str, A
         try:
             result = await asyncio.wait_for(_invoke_once(source, tool_name, arguments), timeout=15)
             result["cache_hit"] = False
-            with _cache_lock:
-                _cache[key] = (time.monotonic() + CACHE_TTL_SECONDS, result)
+            if _cacheable_response(result):
+                with _cache_lock:
+                    _cache[key] = (time.monotonic() + CACHE_TTL_SECONDS, result)
             return result
         except MCPValidationError:
             raise
