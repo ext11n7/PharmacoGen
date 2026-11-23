@@ -21,14 +21,24 @@ exports.handler = async (event) => {
   const geminiKey = groqKey ? '' : (process.env.GEMINI_API_KEY || '').trim();
   const key = groqKey || geminiKey || (process.env.OPENAI_API_KEY || '').trim(), model = (process.env.PHARMACOGEN_LLM_MODEL || (groqKey ? 'qwen/qwen3.8-27b' : geminiKey ? 'gemini-2.5-flash' : '')).trim();
   if (!key || !model) return send(200, { status: 'not_configured', message: 'Для автоматического обзора необходимо настроить серверный ключ и модель. Аннотации и рекомендации доступны ниже.' });
-  const evidence = prepare(payload.report, payload.dossier);
-  if (!evidence.articles.length) return send(200, { status: 'insufficient', message: 'Нет доступных аннотаций для обзора. Попробуйте повторить поиск.' });
-  const allowed = new Set([...evidence.articles, ...evidence.guidelines, ...evidence.annotations].map(item => item.id));
+  const comparison = payload.mode === 'comparison';
+  let evidence = prepare(payload.report, payload.dossier);
+  let system = SYSTEM;
+  if (comparison) {
+    const records = require('./evidence-tools').evidenceRecords(payload.report, payload.dossier);
+    const ids = payload.record_ids;
+    if (!Array.isArray(ids) || ids.length !== 2 || ids[0] === ids[1] || !ids.every(id => records.some(row => row.id === id))) return send(400, { error: 'Выберите две разные записи из текущего досье.' });
+    const selected = ids.map(id => records.find(row => row.id === id));
+    if (selected.some(row => !row.text.trim())) return send(200, { status: 'insufficient', message: 'У одной из записей нет доступного текста. Выберите другую запись для сравнения.' });
+    evidence = { query: evidence.query, records: selected.map(row => ({ ...row, text: row.text.slice(0, 6000) })) };
+    system += ' Compare ONLY these two records. Provide four sections in Russian: what each record describes, common points, differences, and limitations/next checks. Identify differences in variant, population, study type and condition only when stated. Do not infer contradictions from different source types or missing information. State missing information explicitly. Cite both records when making comparisons. Do not infer variant equivalence or personalized clinical advice.';
+  } else if (!evidence.articles.length) return send(200, { status: 'insufficient', message: 'Нет доступных аннотаций для обзора. Попробуйте повторить поиск.' });
+  const allowed = new Set((comparison ? evidence.records : [...evidence.articles, ...evidence.guidelines, ...evidence.annotations]).map(item => item.id));
   try {
     if (geminiKey && !/^[a-zA-Z0-9._-]+$/.test(model)) throw Error('invalid model');
     const url = geminiKey ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` : groqKey ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
     const headers = geminiKey ? { 'Content-Type': 'application/json', 'x-goog-api-key': key } : { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
-    const body = geminiKey ? { systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(evidence) }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } } : { model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(evidence) }] };
+    const body = geminiKey ? { systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(evidence) }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } } : { model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(evidence) }] };
     const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(25000) });
     if (!response.ok) throw Error('model unavailable');
     const data = await response.json(), output = JSON.parse(geminiKey ? data.candidates[0].content.parts.map(part => part.text || '').join('') : data.choices[0].message.content);

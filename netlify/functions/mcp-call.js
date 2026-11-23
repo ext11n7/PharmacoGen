@@ -33,6 +33,11 @@ exports.handler = async (event) => {
     if (!tools.some(tool => tool.name === request.params.name)) throw new Error('Инструмент не найден');
     const a = request.params.arguments;
     const result = request.params.name === tools[0].name ? await searchLiterature(a.drug.trim(), a.gene.trim(), (a.variant || '').trim(), 5) : analyze(request.params.name, a);
+    if (request.params.name === 'compare_records_tool') {
+      const response = await require('./analysis').handler({ httpMethod: 'POST', body: JSON.stringify({ report: a.report, dossier: a.dossier, mode: 'comparison', record_ids: [a.record_a, a.record_b] }) });
+      result.ai_comparison = JSON.parse(response.body);
+      result.sources = evidenceRecords(a.report, a.dossier).filter(row => [a.record_a, a.record_b].includes(row.id)).map(({ id, url }) => ({ id, url }));
+    }
     return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
   });
   const client = new Client({ name: 'pharmacogen-client', version: '1.0.0' });

@@ -4,6 +4,21 @@ const analysis = require('../netlify/functions/analysis');
 
 const event = { httpMethod: 'POST', body: JSON.stringify({ report: { query: { drug: 'warfarin', gene: 'CYP2C9' } }, dossier: { literature: { details: { records: [{ pmid: '1', title: 'Paper', abstract: 'An abstract' }] } } } }) };
 
+test('comparison sends only selected records and rejects unrelated citations', async () => {
+  process.env.GROQ_API_KEY = 'test-only';
+  const payload = JSON.parse(event.body);
+  payload.dossier.literature.details.records.push({ pmid: '2', abstract: 'Second abstract' }, { pmid: '3', abstract: 'Not selected' });
+  payload.mode = 'comparison'; payload.record_ids = ['PMID:1', 'PMID:2'];
+  global.fetch = async (url, options) => {
+    const evidence = JSON.parse(JSON.parse(options.body).messages[1].content);
+    assert.deepEqual(evidence.records.map(row => row.id), ['PMID:1', 'PMID:2']);
+    return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ sections: [{ title: 'Сравнение', paragraphs: [{ text: 'Вывод', source_ids: ['PMID:3'] }] }] }) } }] }) };
+  };
+  const result = JSON.parse((await analysis.handler({ httpMethod: 'POST', body: JSON.stringify(payload) })).body);
+  assert.equal(result.status, 'unavailable');
+  delete process.env.GROQ_API_KEY;
+});
+
 test('unconfigured model is reported without calling a provider', async () => {
   delete process.env.OPENAI_API_KEY;
   delete process.env.PHARMACOGEN_LLM_MODEL;
