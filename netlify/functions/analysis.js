@@ -17,15 +17,16 @@ exports.handler = async (event) => {
   let payload;
   try { payload = JSON.parse(event.body || '{}'); } catch { return send(400, { error: 'Неверный формат запроса' }); }
   if (!payload.report || !payload.dossier || typeof payload.report !== 'object' || typeof payload.dossier !== 'object') return send(400, { error: 'Сначала соберите исследование' });
-  const geminiKey = (process.env.GEMINI_API_KEY || '').trim();
-  const key = geminiKey || (process.env.OPENAI_API_KEY || '').trim(), model = (process.env.PHARMACOGEN_LLM_MODEL || (geminiKey ? 'gemini-2.5-flash' : '')).trim();
+  const groqKey = (process.env.GROQ_API_KEY || '').trim();
+  const geminiKey = groqKey ? '' : (process.env.GEMINI_API_KEY || '').trim();
+  const key = groqKey || geminiKey || (process.env.OPENAI_API_KEY || '').trim(), model = (process.env.PHARMACOGEN_LLM_MODEL || (groqKey ? 'llama-3.3-70b-versatile' : geminiKey ? 'gemini-2.5-flash' : '')).trim();
   if (!key || !model) return send(200, { status: 'not_configured', message: 'Для автоматического обзора необходимо настроить серверный ключ и модель. Аннотации и рекомендации доступны ниже.' });
   const evidence = prepare(payload.report, payload.dossier);
   if (!evidence.articles.length) return send(200, { status: 'insufficient', message: 'Нет доступных аннотаций для обзора. Попробуйте повторить поиск.' });
   const allowed = new Set([...evidence.articles, ...evidence.guidelines, ...evidence.annotations].map(item => item.id));
   try {
     if (geminiKey && !/^[a-zA-Z0-9._-]+$/.test(model)) throw Error('invalid model');
-    const url = geminiKey ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` : 'https://api.openai.com/v1/chat/completions';
+    const url = geminiKey ? `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent` : groqKey ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.openai.com/v1/chat/completions';
     const headers = geminiKey ? { 'Content-Type': 'application/json', 'x-goog-api-key': key } : { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` };
     const body = geminiKey ? { systemInstruction: { parts: [{ text: SYSTEM }] }, contents: [{ role: 'user', parts: [{ text: JSON.stringify(evidence) }] }], generationConfig: { temperature: 0.2, responseMimeType: 'application/json' } } : { model, temperature: 0.2, response_format: { type: 'json_object' }, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: JSON.stringify(evidence) }] };
     const response = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body), signal: AbortSignal.timeout(25000) });
