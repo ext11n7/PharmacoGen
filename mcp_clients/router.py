@@ -165,7 +165,7 @@ async def _invoke_once(source: str, tool_name: str, arguments: dict[str, Any]) -
     client_mode = "legacy" if source == "external" else "auto"
     failure: MCPClientError | None = None
     response_payload: dict[str, Any] | None = None
-    async with Client(server, read_timeout_seconds=12, mode=client_mode) as client:
+    async with Client(server, read_timeout_seconds=40, mode=client_mode) as client:
         request_id = 1
         _trace_request(trace, request_id, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "PharmacoGen", "version": "2.0.0"}})
         _trace_response(trace, request_id, {"protocolVersion": client.protocol_version or "2025-11-25", "serverInfo": _jsonable(client.server_info), "capabilities": _jsonable(client.server_capabilities)})
@@ -249,7 +249,7 @@ async def _invoke_with_retry(source: str, tool_name: str, arguments: dict[str, A
     last_error: Exception | None = None
     for attempt in range(2):
         try:
-            result = await asyncio.wait_for(_invoke_once(source, tool_name, arguments), timeout=15)
+            result = await asyncio.wait_for(_invoke_once(source, tool_name, arguments), timeout=50)
             result["cache_hit"] = False
             if _cacheable_response(result):
                 with _cache_lock:
@@ -296,6 +296,7 @@ def list_mcp_catalog() -> dict[str, Any]:
             {"id": "external", "title": "Внешний medical-mcp", "description": "Пакет из каталога Glama с FDA, PubMed и RxNorm."},
         ],
         "local_tools": [
+            *[{"name": name, "title": title, "category": "проверка исследования", "inputSchema": {"type": "object", "properties": {"report": {"type": "object"}, "dossier": {"type": "object"}}, "required": ["report", "dossier"]}} for name, title in [("audit_research_tool", "Проверка полноты досье"), ("match_variant_tool", "Сопоставление варианта"), ("plan_review_tool", "План проверки"), ("inspect_publications_tool", "Разбор публикаций"), ("inspect_clinvar_tool", "Разбор ClinVar")]],
             {"name": "search_faers_tool", "title": "Поиск FAERS", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}}, "required": ["drug"]}},
             {"name": "search_clinvar_tool", "title": "Поиск ClinVar", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}, "gene": {"type": "string"}, "variant": {"type": "string"}}, "required": ["drug", "gene"]}},
             {"name": "search_cpic_guidelines_tool", "title": "Поиск рекомендаций CPIC", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}, "gene": {"type": "string"}}, "required": ["drug", "gene"]}},

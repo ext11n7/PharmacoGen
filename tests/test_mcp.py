@@ -6,6 +6,15 @@ from mcp.client.stdio import StdioServerParameters
 
 from mcp_servers.pharmacogenetic_tools import audit_evidence_quality, formulate_hypotheses, prioritize_variant_review, synthesize_evidence
 from mcp_clients.router import MCPValidationError, _cacheable_response, call_mcp_tool, list_mcp_catalog
+from mcp_servers.evidence_tools import inspect_clinvar, inspect_publications, match_variant
+
+
+def test_research_tools_preserve_context_and_handle_missing_variant():
+    report = {'query': {'gene': 'CYP2C9'}, 'clinvar': {'status': 'ok', 'records': [{'accession': 'VCV1', 'classification': 'drug response', 'traits': ['warfarin response'], 'url': 'https://www.ncbi.nlm.nih.gov/clinvar/variation/1/'}]}}
+    dossier = {'literature': {'details': {'records': [{'pmid': '1', 'title': 'Test', 'publication_types': ['Review']}]}}}
+    assert 'не указан' in match_variant(report, dossier)['summary']
+    assert 'warfarin response' in inspect_clinvar(report, dossier)['items'][0]['text']
+    assert 'Review' in inspect_publications(report, dossier)['items'][0]['label']
 
 
 def test_unavailable_source_is_not_cached():
@@ -32,6 +41,11 @@ def test_mcp_catalog_contains_useful_project_tools():
     catalog = list_mcp_catalog()
     assert {source["id"] for source in catalog["sources"]} == {"stdio", "network", "external"}
     assert {tool["name"] for tool in catalog["local_tools"]} == {
+        "inspect_publications_tool",
+        "inspect_clinvar_tool",
+        "audit_research_tool",
+        "match_variant_tool",
+        "plan_review_tool",
         "search_faers_tool",
         "search_clinvar_tool",
         "search_cpic_guidelines_tool",

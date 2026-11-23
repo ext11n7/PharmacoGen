@@ -31,6 +31,41 @@ mcp = MCPServer(
 
 
 @mcp.tool()
+def audit_research_tool(report: dict, dossier: dict) -> dict:
+    """Проверить полноту уже собранного исследовательского досье."""
+    from .evidence_tools import audit_research
+    return audit_research(report, dossier)
+
+
+@mcp.tool()
+def match_variant_tool(report: dict, dossier: dict) -> dict:
+    """Сопоставить обозначение варианта с загруженными аннотациями ClinPGx."""
+    from .evidence_tools import match_variant
+    return match_variant(report, dossier)
+
+
+@mcp.tool()
+def plan_review_tool(report: dict, dossier: dict) -> dict:
+    """Составить план дальнейшей проверки собранных данных."""
+    from .evidence_tools import plan_review
+    return plan_review(report, dossier)
+
+
+@mcp.tool()
+def inspect_publications_tool(report: dict, dossier: dict) -> dict:
+    """Показать типы и наличие аннотаций найденных публикаций."""
+    from .evidence_tools import inspect_publications
+    return inspect_publications(report, dossier)
+
+
+@mcp.tool()
+def inspect_clinvar_tool(report: dict, dossier: dict) -> dict:
+    """Разобрать классификации и признаки в записях ClinVar."""
+    from .evidence_tools import inspect_clinvar
+    return inspect_clinvar(report, dossier)
+
+
+@mcp.tool()
 def search_faers_tool(drug: DrugName) -> dict:
     """Найти сообщения FAERS по препарату."""
     from data_sources import FaersClient

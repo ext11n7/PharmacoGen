@@ -5,6 +5,16 @@ function analyze(name, { report = {}, dossier = {} }) {
   const annotations = dossier.clinpgx?.records || [];
   const variant = String(query.variant || '').trim();
   const items = [];
+  if (name === 'inspect_publications_tool') {
+    for (const row of articles.slice(0, 5)) items.push({ label: `PMID ${row.pmid || '—'} · ${(row.publication_types || []).join(', ') || 'Тип не указан'}`, text: `${row.title || 'Без названия'}. ${row.abstract ? 'Аннотация доступна.' : 'Аннотация недоступна.'}`, url: row.url });
+    if (!items.length) items.push({ label: 'Публикации отсутствуют', text: 'Повторите поиск или попробуйте запрос без варианта.' });
+    return { summary: 'Разбор найденных публикаций', items, limitation: 'Тип публикации указан источником и не является оценкой качества. Изучите методы и полный текст.' };
+  }
+  if (name === 'inspect_clinvar_tool') {
+    for (const row of (clinvar.records || []).slice(0, 5)) items.push({ label: row.accession || row.uid || 'ClinVar', text: `${row.title || 'Без названия'}; классификация: ${row.classification || 'не указана'}; статус проверки: ${row.review_status || 'не указан'}; признаки: ${(row.traits || []).join(', ') || 'не указаны'}.`, url: row.url });
+    if (!items.length) items.push({ label: clinvar.status === 'ok' ? 'Записи не найдены' : 'Записи недоступны', text: 'Повторите запрос к ClinVar или уточните вариант.' });
+    return { summary: `Разбор записей ClinVar · ${query.gene || 'ген'}`, items, limitation: 'Классификация относится к указанному признаку и не устанавливает эффект препарата. Проверяйте условия интерпретации в источнике.' };
+  }
   if (name === 'audit_research_tool') {
     items.push({ label: 'FAERS', text: faers.status === 'ok' ? `Источник ответил; найдено сообщений по препарату: ${faers.total_reports ?? 0}. Наличие сообщения не доказывает причинность и связь с геном.` : 'Источник недоступен; повторите сбор.' });
     items.push({ label: 'ClinVar', text: clinvar.status === 'ok' ? `Источник ответил; найдено записей: ${clinvar.total_records ?? 0}. Классификацию нужно читать в контексте указанного признака.` : 'Источник недоступен; повторите сбор.' });

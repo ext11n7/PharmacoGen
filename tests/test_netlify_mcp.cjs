@@ -9,7 +9,7 @@ test('MCP handshake and tool listing come from a real client and server', async 
   assert.equal(response.statusCode, 200);
   assert.equal(body.transport, 'in-memory');
   assert.equal(body.tools[0].name, 'search_pharmacogenetic_literature_tool');
-  assert.equal(body.tools.length, 4);
+  assert.equal(body.tools.length, 6);
   assert.ok(body.trace.some(item => item.packet.method === 'initialize'));
   assert.ok(body.trace.some(item => item.packet.method === 'tools/list'));
 });
