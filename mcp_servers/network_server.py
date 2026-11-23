@@ -46,6 +46,20 @@ def search_clinvar_tool(gene: GeneSymbol, drug: DrugName, variant: OptionalText 
 
 
 @mcp.tool()
+def search_cpic_guidelines_tool(drug: DrugName, gene: GeneSymbol) -> dict:
+    """Найти документы CPIC по препарату и гену."""
+    from .research_sources import search_cpic_guidelines
+    return search_cpic_guidelines(drug, gene)
+
+
+@mcp.tool()
+def search_clinpgx_annotations_tool(drug: DrugName, gene: GeneSymbol, variant: OptionalText = "") -> dict:
+    """Найти аннотации ClinPGx по паре препарат — ген."""
+    from .research_sources import search_clinpgx_annotations
+    return search_clinpgx_annotations(drug, gene, variant)
+
+
+@mcp.tool()
 def synthesize_evidence_tool(
     drug: DrugName,
     gene: GeneSymbol,

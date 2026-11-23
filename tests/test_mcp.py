@@ -13,6 +13,7 @@ def test_unavailable_source_is_not_cached():
     available = {"result": {"structuredContent": {"details": {"status": "ok", "total": 0}}}}
     assert not _cacheable_response(unavailable)
     assert _cacheable_response(available)
+    assert not _cacheable_response({"result": {"structuredContent": {"status": "unavailable"}}})
 
 
 def test_mcp_tools_analyze_existing_evidence():
@@ -33,6 +34,8 @@ def test_mcp_catalog_contains_useful_project_tools():
     assert {tool["name"] for tool in catalog["local_tools"]} == {
         "search_faers_tool",
         "search_clinvar_tool",
+        "search_cpic_guidelines_tool",
+        "search_clinpgx_annotations_tool",
         "synthesize_evidence_tool",
         "prioritize_variant_review_tool",
         "audit_evidence_quality_tool",

@@ -12,6 +12,36 @@ async function fetchJson(url, params) {
   return response.json();
 }
 
+async function enrichPubmed(records) {
+  const ids = records.map(x => String(x.pmid || '')).filter(x => /^\d+$/.test(x));
+  if (!ids.length) return records;
+  try {
+    const data = await fetchJson('https://www.ebi.ac.uk/europepmc/webservices/rest/search', { query: `EXT_ID:(${ids.join(' OR ')}) AND SRC:MED`, format: 'json', resultType: 'core', pageSize: String(ids.length) });
+    const matches = new Map((data.resultList?.result || []).map(item => [String(item.pmid), item]));
+    return records.map(record => {
+      const item = matches.get(String(record.pmid)) || {};
+      return { ...record, abstract: String(item.abstractText || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), publication_types: item.pubTypeList?.pubType || [], doi: item.doi || '', pmcid: item.pmcid || '', open_access: item.isOpenAccess === 'Y', abstract_source: 'Europe PMC / PubMed' };
+    });
+  } catch { return records.map(record => ({ ...record, abstract_unavailable: true })); }
+}
+
+async function searchCpic(drug, gene) {
+  try {
+    const rows = await fetchJson('https://api.cpicpgx.org/v1/guideline', { select: 'id,name,genes,url,version', name: `ilike.*${drug}*`, limit: '30' });
+    const records = rows.filter(row => Array.isArray(row.genes) && row.genes.some(item => String(item).toUpperCase() === gene.toUpperCase()));
+    return { status: 'ok', source: 'CPIC', query: { drug, gene }, total: records.length, records };
+  } catch (error) { return { status: 'unavailable', source: 'CPIC', total: 0, records: [], error: error.message }; }
+}
+
+async function searchClinpgx(drug, gene, variant) {
+  try {
+    const payload = await fetchJson('https://api.clinpgx.org/v1/data/clinicalAnnotation', { 'relatedChemicals.name': drug, 'location.genes.symbol': gene });
+    if (payload.status !== 'success' || !Array.isArray(payload.data)) throw Error('ClinPGx вернул неожиданный формат');
+    const records = payload.data.filter(item => Array.isArray(item.relatedChemicals) && item.relatedChemicals.some(x => String(x.name || '').toLowerCase() === drug.toLowerCase()) && Array.isArray(item.location?.genes) && item.location.genes.some(x => String(x.symbol || '').toUpperCase() === gene.toUpperCase()) && /^PA\d+$/.test(String(item.accessionId || ''))).map(item => ({ id: item.accessionId, title: item.name || '', variant: item.location?.displayName || item.location?.rsid || '', evidence_level: item.levelOfEvidence?.term || '', url: `https://www.clinpgx.org/clinicalAnnotation/${item.accessionId}`, statements: (Array.isArray(item.allelePhenotypes) ? item.allelePhenotypes : []).slice(0, 4).map(row => ({ allele: row.allele || '', text: row.phenotype || '' })), scope: 'drug_gene_pair' }));
+    return { status: 'ok', source: 'ClinPGx', query: { drug, gene, variant }, total: records.length, records: records.slice(0, 8) };
+  } catch (error) { return { status: 'unavailable', source: 'ClinPGx', total: 0, records: [], error: error.message }; }
+}
+
 async function searchLiterature(drug, gene, variant, maxResults = 5) {
   const terms = [`"${drug}"[Title/Abstract]`, `"${gene}"[Title/Abstract]`];
   if (variant) terms.push(`"${variant}"[Title/Abstract]`);
@@ -28,8 +58,9 @@ async function searchLiterature(drug, gene, variant, maxResults = 5) {
         records.push({ pmid: String(uid), title: item.title || '', journal: item.fulljournalname || '', pubdate: item.pubdate || '', url: `https://pubmed.ncbi.nlm.nih.gov/${uid}/` });
       }
     }
+    const enriched = await enrichPubmed(records);
     const total = asNumber(result.count);
-    return { summary: total ? `Найдено публикаций PubMed: ${total}.` : 'По строгому запросу публикации не найдены; гипотезу нужно проверить по расширенному запросу.', details: { status: 'ok', query, total, returned: records.length, records, source: 'PubMed / NCBI' }, next_steps: ['Проверить методы наиболее релевантных публикаций.', 'Сопоставить публикации с вариантом и классификацией ClinVar.'] };
+    return { summary: total ? `Найдено публикаций PubMed: ${total}.` : 'По строгому запросу публикации не найдены; гипотезу нужно проверить по расширенному запросу.', details: { status: 'ok', query, total, returned: enriched.length, records: enriched, source: 'PubMed / NCBI' }, next_steps: ['Проверить методы наиболее релевантных публикаций.', 'Сопоставить публикации с вариантом и классификацией ClinVar.'] };
   } catch (error) {
     return { summary: 'PubMed временно недоступен: гипотеза сформирована по текущему срезу.', details: { status: 'unavailable', query, total: 0, returned: 0, records: [], source: 'PubMed / NCBI', error: error.message }, next_steps: ['Повторить поиск публикаций позже.', 'Не усиливать гипотезу без проверки внешней литературы.'] };
   }
@@ -158,7 +189,7 @@ exports.handler = async function handler(event) {
     const report = payload.report;
     if (!report || typeof report !== 'object') throw new Error('Передайте готовый отчёт исследования');
     const input = reportArguments(report);
-    const literature = await searchLiterature(input.synthesis.drug, input.synthesis.gene, input.synthesis.variant, 5);
+    const [literature, cpic, clinpgx] = await Promise.all([searchLiterature(input.synthesis.drug, input.synthesis.gene, input.synthesis.variant, 5), searchCpic(input.synthesis.drug, input.synthesis.gene), searchClinpgx(input.synthesis.drug, input.synthesis.gene, input.synthesis.variant)]);
     return {
       statusCode: 200,
       headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
@@ -167,6 +198,8 @@ exports.handler = async function handler(event) {
         transport: 'netlify-function',
         query: input.query,
         literature,
+        cpic,
+        clinpgx,
         limitations: [
           'На Netlify поиск PubMed выполняется серверной функцией; MCP доступен при локальном запуске.',
           'Совпадение поискового запроса не означает, что публикация подтверждает связь.',

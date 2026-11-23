@@ -208,6 +208,8 @@ def search_pharmacogenetic_literature(
                     "pubdate": str(item.get("pubdate", "")),
                     "url": f"https://pubmed.ncbi.nlm.nih.gov/{uid}/",
                 })
+        from .research_sources import enrich_pubmed_records
+        enrich_pubmed_records(records)
         total = int(result.get("count", 0) or 0)
         summary_text = f"Найдено публикаций PubMed: {total}." if total else "По строгому запросу публикации не найдены; гипотезу нужно проверять по расширенному запросу."
         return _result(summary_text, {"status": "ok", "query": query, "total": total, "returned": len(records), "records": records, "source": "PubMed / NCBI"}, ["Проверить заголовки и методы наиболее релевантных публикаций.", "Сопоставить результаты публикаций с конкретным вариантом и классификацией ClinVar."])

@@ -222,6 +222,20 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/api/analysis":
+            try:
+                from mcp_servers.research_summary import create_summary
+                length = int(self.headers.get("Content-Length", "0"))
+                if length > 200_000:
+                    raise ValueError("Отчёт слишком велик")
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                report, dossier = payload.get("report"), payload.get("dossier")
+                if not isinstance(report, dict) or not isinstance(dossier, dict):
+                    raise ValueError("Сначала соберите исследование")
+                self._send(json.dumps(create_summary(report, dossier), ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            except (ValueError, TypeError) as exc:
+                self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)
+            return
         if path == "/api/mcp/check":
             try:
                 from mcp_clients.router import check_mcp_connection
@@ -294,8 +308,26 @@ class Handler(BaseHTTPRequestHandler):
             if source not in {"stdio", "network"}:
                 raise ValueError("Выберите локальный MCP-транспорт")
             query, _, _ = _report_mcp_arguments(report)
-            response = call_mcp_tool(source, "search_pharmacogenetic_literature_tool", {"drug": query["drug"], "gene": query["gene"], "variant": query["variant"], "max_results": 5})
-            dossier = {"status": "ok", "literature": _extract_mcp_result(response), "trace": response.get("trace", []), "transport": source}
+            try:
+                response = call_mcp_tool(source, "search_pharmacogenetic_literature_tool", {"drug": query["drug"], "gene": query["gene"], "variant": query["variant"], "max_results": 5})
+                literature = _extract_mcp_result(response)
+                trace = list(response.get("trace", []))
+            except MCPClientError as exc:
+                literature = {"details": {"status": "unavailable", "error": str(exc), "records": []}}
+                trace = []
+            try:
+                cpic_response = call_mcp_tool(source, "search_cpic_guidelines_tool", {"drug": query["drug"], "gene": query["gene"]})
+                cpic = _extract_mcp_result(cpic_response)
+                trace.extend(cpic_response.get("trace", []))
+            except MCPClientError as exc:
+                cpic = {"status": "unavailable", "error": str(exc), "records": []}
+            try:
+                annotation_response = call_mcp_tool(source, "search_clinpgx_annotations_tool", {"drug": query["drug"], "gene": query["gene"], "variant": query["variant"]})
+                clinpgx = _extract_mcp_result(annotation_response)
+                trace.extend(annotation_response.get("trace", []))
+            except MCPClientError as exc:
+                clinpgx = {"status": "unavailable", "error": str(exc), "records": []}
+            dossier = {"status": "ok", "literature": literature, "cpic": cpic, "clinpgx": clinpgx, "trace": trace, "transport": source}
             self._send(json.dumps(dossier, ensure_ascii=False).encode(), "application/json; charset=utf-8")
         except ValueError as exc:
             self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)

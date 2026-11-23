@@ -235,7 +235,7 @@ def _cacheable_response(response: dict[str, Any]) -> bool:
                     pass
                 break
     details = structured.get("details", {}) if isinstance(structured, dict) else {}
-    return not (isinstance(details, dict) and details.get("status") in {"error", "unavailable"})
+    return not ((isinstance(structured, dict) and structured.get("status") in {"error", "unavailable"}) or (isinstance(details, dict) and details.get("status") in {"error", "unavailable"}))
 
 
 async def _invoke_with_retry(source: str, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
@@ -298,6 +298,8 @@ def list_mcp_catalog() -> dict[str, Any]:
         "local_tools": [
             {"name": "search_faers_tool", "title": "Поиск FAERS", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}}, "required": ["drug"]}},
             {"name": "search_clinvar_tool", "title": "Поиск ClinVar", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}, "gene": {"type": "string"}, "variant": {"type": "string"}}, "required": ["drug", "gene"]}},
+            {"name": "search_cpic_guidelines_tool", "title": "Поиск рекомендаций CPIC", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}, "gene": {"type": "string"}}, "required": ["drug", "gene"]}},
+            {"name": "search_clinpgx_annotations_tool", "title": "Поиск аннотаций ClinPGx", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}, "gene": {"type": "string"}, "variant": {"type": "string"}}, "required": ["drug", "gene"]}},
         ] + [
             {"name": f"{item['name']}_tool", "title": item["title"], "category": item["category"], "inputSchema": {"type": "object", "properties": item["parameters"], "required": item.get("required", [])}, "source": item["source"]}
             for item in list_pharmacogenetic_tools()
