@@ -22,8 +22,24 @@ async function enrichPubmed(records) {
       const item = matches.get(String(record.pmid)) || {};
       return { ...record, abstract: String(item.abstractText || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim(), publication_types: item.pubTypeList?.pubType || [], doi: item.doi || '', pmcid: item.pmcid || '', open_access: item.isOpenAccess === 'Y', abstract_source: 'Europe PMC / PubMed' };
     });
-  } catch { return records.map(record => ({ ...record, abstract_unavailable: true })); }
+  } catch {
+    try {
+      const response = await fetch(`https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi?${new URLSearchParams({ db: 'pubmed', id: ids.join(','), retmode: 'xml' })}`, { signal: AbortSignal.timeout(12000) });
+      if (!response.ok) throw Error('PubMed unavailable');
+      return mergePubmedXml(records, await response.text());
+    } catch { return records.map(record => ({ ...record, abstract_unavailable: true })); }
+  }
 }
+
+function mergePubmedXml(records, xml) {
+  const { XMLParser } = require('fast-xml-parser');
+  const parsed = new XMLParser({ ignoreAttributes: false, parseTagValue: false, processEntities: false }).parse(xml);
+  const array = value => value == null ? [] : Array.isArray(value) ? value : [value];
+  const plain = value => typeof value === 'string' ? value : value && typeof value === 'object' ? Object.entries(value).filter(([key]) => !key.startsWith('@_')).map(([, child]) => array(child).map(plain).join(' ')).join(' ') : '';
+  const matches = new Map(array(parsed.PubmedArticleSet?.PubmedArticle).map(row => [plain(row.MedlineCitation?.PMID).trim(), row.MedlineCitation?.Article || {}]));
+  return records.map(record => { const article = matches.get(String(record.pmid)); if (!article) return { ...record, abstract_unavailable: true }; return { ...record, abstract: array(article.Abstract?.AbstractText).map(plain).join('\n').trim(), publication_types: array(article.PublicationTypeList?.PublicationType).map(plain), abstract_source: 'PubMed / NCBI efetch' }; });
+}
+exports.mergePubmedXml = mergePubmedXml;
 
 async function searchCpic(drug, gene) {
   try {

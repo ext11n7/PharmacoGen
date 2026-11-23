@@ -3,9 +3,13 @@ const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js');
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const { searchLiterature } = require('./mcp-dossier');
-const { analyze } = require('./evidence-tools');
+const { analyze, evidenceRecords } = require('./evidence-tools');
 
 const tools = [{ name: 'search_pharmacogenetic_literature_tool', description: 'Поиск публикаций PubMed по препарату, гену и варианту', inputSchema: { type: 'object', properties: { drug: { type: 'string', minLength: 2, maxLength: 120 }, gene: { type: 'string', minLength: 2, maxLength: 40 }, variant: { type: 'string', maxLength: 120 } }, required: ['drug', 'gene'] } }, ...[['audit_research_tool', 'Проверка полноты досье'], ['match_variant_tool', 'Сопоставление обозначения варианта'], ['plan_review_tool', 'План дальнейшей проверки'], ['inspect_publications_tool', 'Разбор публикаций'], ['inspect_clinvar_tool', 'Разбор записей ClinVar']].map(([name, description]) => ({ name, description, inputSchema: { type: 'object', properties: { report: { type: 'object' }, dossier: { type: 'object' } }, required: ['report', 'dossier'] } }))];
+for (const [name, description, fields] of [
+  ['search_evidence_tool', 'Поиск фразы в собранных записях', ['term']],
+  ['compare_records_tool', 'Сравнение двух выбранных записей', ['record_a', 'record_b']],
+]) tools.push({ name, description, inputSchema: { type: 'object', properties: { report: { type: 'object' }, dossier: { type: 'object' }, ...Object.fromEntries(fields.map(field => [field, { type: 'string', minLength: 2, maxLength: 100 }])) }, required: ['report', 'dossier', ...fields] } });
 
 exports.handler = async (event) => {
   const send = (statusCode, value) => ({ statusCode, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, body: JSON.stringify(value) });
@@ -19,6 +23,9 @@ exports.handler = async (event) => {
   const args = input.arguments || {};
   if (!isCheck && input.tool === tools[0].name && (typeof args.drug !== 'string' || args.drug.trim().length < 2 || args.drug.length > 120 || typeof args.gene !== 'string' || args.gene.trim().length < 2 || args.gene.length > 40 || (args.variant != null && (typeof args.variant !== 'string' || args.variant.length > 120)))) return send(400, { error: 'Укажите препарат и ген (не менее двух символов).' });
   if (!isCheck && input.tool !== tools[0].name && (!args.report || !args.dossier || typeof args.report !== 'object' || typeof args.dossier !== 'object')) return send(400, { error: 'Сначала завершите исследование.' });
+  if (!isCheck && input.tool === 'search_evidence_tool' && (typeof args.term !== 'string' || args.term.trim().length < 2 || args.term.trim().length > 100)) return send(400, { error: 'Введите фразу от 2 до 100 символов.' });
+  if (!isCheck && input.tool === 'compare_records_tool' && (typeof args.record_a !== 'string' || typeof args.record_b !== 'string' || args.record_a === args.record_b || !args.record_a || !args.record_b || args.record_a.length > 100 || args.record_b.length > 100)) return send(400, { error: 'Выберите две разные записи.' });
+  if (!isCheck && input.tool === 'compare_records_tool' && ![args.record_a, args.record_b].every(id => evidenceRecords(args.report, args.dossier).some(row => row.id === id))) return send(400, { error: 'Выбранная запись отсутствует в текущем досье.' });
   const trace = [];
   const server = new Server({ name: 'pharmacogen-netlify', version: '1.0.0' }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));

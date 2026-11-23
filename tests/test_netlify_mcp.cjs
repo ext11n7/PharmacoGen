@@ -9,9 +9,25 @@ test('MCP handshake and tool listing come from a real client and server', async 
   assert.equal(response.statusCode, 200);
   assert.equal(body.transport, 'in-memory');
   assert.equal(body.tools[0].name, 'search_pharmacogenetic_literature_tool');
-  assert.equal(body.tools.length, 6);
+  assert.equal(body.tools.length, 8);
   assert.ok(body.trace.some(item => item.packet.method === 'initialize'));
   assert.ok(body.trace.some(item => item.packet.method === 'tools/list'));
+});
+
+test('search and comparison operate on selected source records', async () => {
+  const report = { query: { drug: 'warfarin', gene: 'CYP2C9' }, clinvar: { records: [{ uid: '123', title: 'CYP2C9 variant', classification: 'drug response', traits: ['bleeding'] }] } };
+  const dossier = { literature: { details: { records: [{ pmid: '42', title: 'Warfarin study', abstract: 'Bleeding was reported.' }] } } };
+  const invoke = async (tool, extra) => JSON.parse((await call({ source: 'cloud', tool, arguments: { report, dossier, ...extra } })).body).result.structuredContent;
+  const hits = await invoke('search_evidence_tool', { term: 'bleeding' });
+  assert.deepEqual(hits.items.map(x => x.label), ['PubMed · PMID:42', 'ClinVar · ClinVar:123']);
+  const compared = await invoke('compare_records_tool', { record_a: 'PMID:42', record_b: 'ClinVar:123' });
+  assert.equal(compared.items.length, 2);
+  assert.match(compared.items[0].text, /Bleeding/);
+  assert.match(compared.items[1].text, /drug response/);
+  const invalid = await call({ source: 'cloud', tool: 'compare_records_tool', arguments: { report, dossier, record_a: 'PMID:42', record_b: 'PMID:42' } });
+  assert.equal(invalid.statusCode, 400);
+  const noHits = await invoke('search_evidence_tool', { term: 'no such text' });
+  assert.equal(noHits.items[0].label, 'Совпадений нет');
 });
 
 test('variant comparison is grounded in retrieved annotations and handles no match', async () => {
