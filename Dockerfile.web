@@ -9,6 +9,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY agents.py data_sources.py web_server.py ./
+COPY mcp_clients ./mcp_clients
+COPY mcp_servers ./mcp_servers
 COPY web ./web
 
 EXPOSE 8503

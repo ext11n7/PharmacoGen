@@ -33,7 +33,12 @@ class FaersClient(HttpClient):
 
     def search_drug(self, drug: str) -> dict[str, Any]:
         search = f'patient.drug.openfda.generic_name:"{drug}"'
-        summary = self.get_json(self.base_url, {"search": search, "limit": 1})
+        try:
+            summary = self.get_json(self.base_url, {"search": search, "limit": 1})
+        except SourceError as exc:
+            if isinstance(exc.__cause__, requests.HTTPError) and exc.__cause__.response is not None and exc.__cause__.response.status_code == 404:
+                return {"status": "ok", "source": self.source_url, "query": search, "total_reports": 0, "preview_reports": 0, "serious_preview": 0, "serious_rate": 0, "top_reactions": [], "sample_report_id": None}
+            raise
         total = int(summary.get("meta", {}).get("results", {}).get("total", 0))
         serious = 0
         reactions: Counter[str] = Counter()
@@ -95,7 +100,7 @@ class ClinVarClient(HttpClient):
                     "review_status": classification.get("review_status", ""),
                     "last_evaluated": classification.get("last_evaluated", ""),
                     "traits": [item.get("trait_name", "") for item in classification.get("trait_set", [])],
-                    "url": f"https://www.ncbi.nlm.nih.gov/clinvar/variation/{record.get('accession', '')}/",
+                    "url": f"https://www.ncbi.nlm.nih.gov/clinvar/variation/{uid}/",
                 })
         pathogenic_records = sum("pathogenic" in item["classification"].casefold() for item in records)
         return {

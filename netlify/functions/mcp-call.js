@@ -45,6 +45,7 @@ async function callTool(tool, args) {
 
 exports.handler = async function handler(event) {
   if (event.httpMethod !== 'POST') return { statusCode: 405, body: JSON.stringify({ error: 'Используйте POST' }) };
+  return { statusCode: 503, headers: { 'Content-Type': 'application/json; charset=utf-8' }, body: JSON.stringify({ error: 'На Netlify MCP-сервер не подключён. Для настоящего вызова запустите приложение локально.' }) };
   try {
     const payload = JSON.parse(event.body || '{}');
     const source = String(payload.source || 'stdio');

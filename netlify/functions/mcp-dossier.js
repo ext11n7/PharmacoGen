@@ -89,7 +89,7 @@ function makeStage(title, tool, detail) {
     title,
     tool,
     status: 'done',
-    trace: [{ direction: 'request', method: 'tools/call', tool, timestamp: now() }, { direction: 'response', tool, status: 'ok', timestamp: now() }],
+    trace: [],
     detail,
   };
 }
@@ -173,7 +173,7 @@ exports.handler = async function handler(event) {
       }),
       stage: makeStage(`Приоритет варианта ${index + 1}`, 'prioritize_variant_review_tool', 'Вариант направлен на ручную проверку.'),
     }));
-    const hypotheses = formulateHypotheses(input.synthesis, literature);
+    const hypotheses = { summary: 'Исследовательский вопрос подготовлен для проверки по источникам.', details: { hypotheses: [{ type: 'вопрос для исследования', statement: `Связан ли ${input.synthesis.gene}${input.synthesis.variant ? ` (${input.synthesis.variant})` : ''} с ответом на ${input.synthesis.drug}?`, confidence: 'не оценена', basis: 'Ответ требует проверки отдельных публикаций и их методов. Совпадение поисковых терминов не доказывает связь.', next_step: 'Открыть найденные публикации и проверить результаты, участников и конкретный вариант.' }] }, next_steps: ['Проверить результаты и методы найденных публикаций.'] };
     const stages = [
       makeStage('Синтез источников', 'synthesize_evidence_tool', 'Сводка FAERS и ClinVar сопоставлена.'),
       makeStage('Контроль качества', 'audit_evidence_quality_tool', quality.summary),

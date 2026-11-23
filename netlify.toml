@@ -23,6 +23,11 @@
   status = 200
 
 [[redirects]]
+  from = "/api/mcp/check"
+  to = "/.netlify/functions/mcp-call"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

@@ -143,9 +143,9 @@ def _source_server(source: str) -> Any:
             args=[
                 "-y",
                 "--package=medical-mcp",
-                "node",
-                "-e",
-                "console.log=console.error; import('medical-mcp/build/index.js')",
+                "sh",
+                "-c",
+                'node -e "console.log=console.error; import(require(\'url\').pathToFileURL(process.argv[1]))" "$(command -v medical-mcp)"',
             ],
         )
     raise MCPClientError(f"Неизвестный источник MCP: {source}")
@@ -251,6 +251,22 @@ def call_mcp_tool(source: str, tool_name: str, arguments: dict[str, Any]) -> dic
     return asyncio.run(_invoke_with_retry(source, tool_name, arguments))
 
 
+async def _check_connection(source: str) -> dict[str, Any]:
+    server = _source_server(source)
+    async with Client(server, read_timeout_seconds=12, mode="legacy" if source == "external" else "auto") as client:
+        result = await client.list_tools()
+        return {"source": source, "server": _jsonable(client.server_info), "tools": [{"name": _tool_name(tool), "description": str(getattr(tool, "description", "") or "")} for tool in result.tools]}
+
+
+def check_mcp_connection(source: str) -> dict[str, Any]:
+    async def run() -> dict[str, Any]:
+        return await asyncio.wait_for(_check_connection(source), timeout=15)
+    try:
+        return asyncio.run(run())
+    except Exception as exc:
+        raise MCPClientError(f"Не удалось подключиться к MCP: {exc}") from exc
+
+
 def list_mcp_catalog() -> dict[str, Any]:
     """Return schemas used by the dynamic form before a tool is called."""
     from mcp_servers.pharmacogenetic_tools import list_pharmacogenetic_tools
@@ -262,6 +278,9 @@ def list_mcp_catalog() -> dict[str, Any]:
             {"id": "external", "title": "Внешний medical-mcp", "description": "Пакет из каталога Glama с FDA, PubMed и RxNorm."},
         ],
         "local_tools": [
+            {"name": "search_faers_tool", "title": "Поиск FAERS", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}}, "required": ["drug"]}},
+            {"name": "search_clinvar_tool", "title": "Поиск ClinVar", "category": "источники", "inputSchema": {"type": "object", "properties": {"drug": {"type": "string"}, "gene": {"type": "string"}, "variant": {"type": "string"}}, "required": ["drug", "gene"]}},
+        ] + [
             {"name": f"{item['name']}_tool", "title": item["title"], "category": item["category"], "inputSchema": {"type": "object", "properties": item["parameters"], "required": item.get("required", [])}, "source": item["source"]}
             for item in list_pharmacogenetic_tools()
         ],

@@ -59,12 +59,9 @@ def synthesize_evidence(
     normalized_gene = _clean(gene, "gene").upper()
     normalized_variant = _clean(variant, "variant", required=False)
     available_sources = int(faers_available) + int(clinvar_available)
-    if faers_available and clinvar_available and faers_reports and clinvar_pathogenic_records:
-        summary = "Есть сигналы в двух источниках: требуется предметная проверка связи."
-        priority = "высокий"
-    elif available_sources >= 1 and (faers_reports or clinvar_records):
-        summary = "Есть отдельные сигналы: нужно проверить их согласованность."
-        priority = "средний"
+    if available_sources >= 1 and (faers_reports or clinvar_records):
+        summary = "Данные собраны. Связь препарата и гена требует отдельной проверки по источникам."
+        priority = "не оценён"
     elif available_sources == 2:
         summary = "Источники доступны, но в текущем срезе сильных сигналов не найдено."
         priority = "низкий"
@@ -238,7 +235,7 @@ def formulate_hypotheses(
     titles = _clean(literature_titles, "literature_titles", required=False)
     hypotheses: list[dict[str, str]] = []
     if normalized_variant and clinvar_records:
-        confidence = "средняя" if literature_count and clinvar_pathogenic_records else "низкая"
+        confidence = "не оценена"
         hypotheses.append({
             "type": "вариант-ответ",
             "statement": f"Вариант {normalized_variant} может быть связан с изменённым ответом на {normalized_drug} у носителей варианта {normalized_gene}.",
@@ -258,7 +255,7 @@ def formulate_hypotheses(
         hypotheses.append({
             "type": "литературная проверка",
             "statement": f"Связь {normalized_drug} × {normalized_gene} имеет публикационный контекст и заслуживает предметной проверки.",
-            "confidence": "средняя" if literature_count >= 3 else "низкая",
+            "confidence": "не оценена",
             "basis": f"В PubMed найдено публикаций: {literature_count}." + (f" Пример: {titles[:180]}." if titles else ""),
             "next_step": "Прочитать методы и критерии включения, затем сравнить их с текущим срезом.",
         })

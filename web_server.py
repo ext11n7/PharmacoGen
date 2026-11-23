@@ -6,7 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
-from agents import run_investigation
+from agents import MCPClinVarClient, MCPFaersClient, run_investigation
 from mcp_clients.router import MCPClientError, MCPValidationError, call_mcp_tool
 
 
@@ -222,6 +222,18 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path == "/api/mcp/check":
+            try:
+                from mcp_clients.router import check_mcp_connection
+                length = int(self.headers.get("Content-Length", "0"))
+                payload = json.loads(self.rfile.read(length) or b"{}")
+                source = str(payload.get("source", ""))
+                if source not in {"stdio", "network", "external"}:
+                    raise ValueError("Выберите источник MCP")
+                self._send(json.dumps(check_mcp_connection(source), ensure_ascii=False).encode(), "application/json; charset=utf-8")
+            except (MCPClientError, ValueError) as exc:
+                self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 502)
+            return
         if path == "/api/mcp/call":
             self._handle_mcp_call()
             return
@@ -239,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
             variant = str(payload.get("variant", "")).strip()
             if not drug or not gene:
                 raise ValueError("Укажите препарат и ген")
-            report = run_investigation(drug, gene, variant=variant)
+            report = run_investigation(drug, gene, clients={"faers": MCPFaersClient(), "clinvar": MCPClinVarClient()}, variant=variant)
             self._send(json.dumps(report.to_dict(), ensure_ascii=False).encode(), "application/json; charset=utf-8")
         except ValueError as exc:
             self._send(json.dumps({"error": str(exc)}, ensure_ascii=False).encode(), "application/json; charset=utf-8", 400)

@@ -28,7 +28,8 @@ def test_normalize_term_handles_aliases():
 def test_investigation_has_all_agent_outputs():
     report = run_investigation("Coumadin", "cyp2c9", {"faers": FakeFaers(), "clinvar": FakeClinVar()})
     assert report.normalized_query == {"drug": "warfarin", "gene": "CYP2C9"}
-    assert report.synthesis["confidence"] == "exploratory"
+    assert report.synthesis["confidence"] == "weak"
+    assert "отдельной проверки" in report.synthesis["headline"]
     assert {event.agent for event in report.events} == {"Entity Agent", "FAERS Agent", "ClinVar Agent", "Synthesis Agent"}
 
 

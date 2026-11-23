@@ -6,8 +6,40 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 import re
+import json
 
 from data_sources import ClinVarClient, FaersClient, SourceError
+
+
+def _mcp_result(tool: str, arguments: dict[str, Any]) -> dict[str, Any]:
+    from mcp_clients.router import call_mcp_tool
+    try:
+        result = call_mcp_tool("stdio", tool, arguments).get("result", {})
+        structured = result.get("structuredContent") or result.get("structured_content")
+        if isinstance(structured, dict):
+            return structured
+        for item in result.get("content", []):
+            if item.get("type") == "text":
+                value = json.loads(item.get("text", "{}"))
+                if isinstance(value, dict):
+                    return value
+        raise ValueError("MCP вернул неожиданный формат")
+    except Exception as exc:
+        raise SourceError(f"Не удалось получить данные через MCP: {exc}") from exc
+
+
+class MCPFaersClient:
+    source_url = "https://open.fda.gov/apis/drug/event/"
+
+    def search_drug(self, drug: str) -> dict[str, Any]:
+        return _mcp_result("search_faers_tool", {"drug": drug})
+
+
+class MCPClinVarClient:
+    source_url = "https://www.ncbi.nlm.nih.gov/clinvar/"
+
+    def search_gene(self, gene: str, drug: str, variant: str = "") -> dict[str, Any]:
+        return _mcp_result("search_clinvar_tool", {"gene": gene, "drug": drug, "variant": variant or ""})
 
 
 @dataclass
@@ -150,12 +182,9 @@ class SynthesisAgent:
         serious_rate = faers.get("serious_rate") if faers_ok else None
         pathogenic = clinvar.get("pathogenic_records", 0) if clinvar_ok else 0
 
-        if faers_ok and clinvar_ok and faers.get("total_reports", 0) and pathogenic:
-            confidence = "exploratory"
-            headline = f"Есть основание проверить связь {drug} + {gene}; это гипотеза, а не доказанный эффект."
-        elif faers_ok and clinvar_ok:
+        if faers_ok and clinvar_ok:
             confidence = "weak"
-            headline = "Данные собраны, но автоматического основания для сильной гипотезы недостаточно."
+            headline = "Данные источников собраны. Связь препарата и гена требует отдельной проверки."
         else:
             confidence = "incomplete"
             headline = "Отчёт неполный: один или оба источника недоступны."
@@ -172,7 +201,7 @@ class SynthesisAgent:
             "why": [
                 f"FAERS: {faers.get('total_reports', 0):,} сообщений по препарату {drug}." if faers_ok else "FAERS: данные недоступны.",
                 f"ClinVar: {pathogenic:,} записей с классификацией pathogenic/likely pathogenic для {gene}." if clinvar_ok else "ClinVar: данные недоступны.",
-                f"Доля серьёзных сообщений в превью FAERS: {serious_rate:.1%}." if serious_rate is not None else "Доля серьёзных сообщений: не рассчитана.",
+                "FAERS содержит сообщения по препарату, но не устанавливает генотип или причинную связь.",
             ],
             "limitations": limitations,
             "not_medical_advice": True,

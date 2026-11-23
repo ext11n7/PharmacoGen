@@ -61,7 +61,12 @@ async function getJson(url, params) {
 
 async function searchFaers(drug) {
   const search = `patient.drug.openfda.generic_name:"${drug}"`;
-  const summary = await getJson('https://api.fda.gov/drug/event.json', { search, limit: '1' });
+  let summary;
+  try { summary = await getJson('https://api.fda.gov/drug/event.json', { search, limit: '1' }); }
+  catch (error) {
+    if (error.message === 'Источник вернул статус 404') return { status: 'ok', source: sourceUrls.faers, query: search, total_reports: 0, preview_reports: 0, serious_preview: 0, serious_rate: 0, top_reactions: [] };
+    throw error;
+  }
   const total = Number(summary?.meta?.results?.total || 0);
   const preview = await getJson('https://api.fda.gov/drug/event.json', { search, limit: '20' });
   let serious = 0;
@@ -103,7 +108,7 @@ async function searchClinvar(gene, drug, variant) {
         review_status: classification.review_status || '',
         last_evaluated: classification.last_evaluated || '',
         traits: (classification.trait_set || []).map((item) => item.trait_name || ''),
-        url: `https://www.ncbi.nlm.nih.gov/clinvar/variation/${record.accession || ''}/`,
+        url: `https://www.ncbi.nlm.nih.gov/clinvar/variation/${uid}/`,
       });
     }
   }
@@ -117,10 +122,7 @@ function synthesis(drug, gene, variant, faers, clinvar) {
   const pathogenic = clinvarOk ? clinvar.pathogenic_records : 0;
   let confidence = 'incomplete';
   let headline = 'Отчёт неполный: один или оба источника недоступны.';
-  if (faersOk && clinvarOk && faers.total_reports && pathogenic) {
-    confidence = 'exploratory';
-    headline = `Есть основание проверить связь ${drug} + ${gene}; это гипотеза, а не доказанный эффект.`;
-  } else if (faersOk && clinvarOk) {
+  if (faersOk && clinvarOk) {
     confidence = 'weak';
     headline = 'Данные собраны, но автоматического основания для сильной гипотезы недостаточно.';
   }
@@ -129,7 +131,7 @@ function synthesis(drug, gene, variant, faers, clinvar) {
     why: [
       faersOk ? `FAERS: ${faers.total_reports.toLocaleString('ru-RU')} сообщений по препарату ${drug}.` : 'FAERS: данные недоступны.',
       clinvarOk ? `ClinVar: ${pathogenic.toLocaleString('ru-RU')} записей с классификацией pathogenic/likely pathogenic для ${gene}.` : 'ClinVar: данные недоступны.',
-      faersOk ? `Доля серьёзных сообщений в превью FAERS: ${(faers.serious_rate || 0).toLocaleString('ru-RU', { style: 'percent', maximumFractionDigits: 1 })}.` : 'Доля серьёзных сообщений: не рассчитана.',
+      'FAERS содержит сообщения по препарату, но не устанавливает генотип или причинную связь.',
     ],
     limitations: [
       'FAERS основан на спонтанных сообщениях: число сообщений не равно частоте и не доказывает причинность.',

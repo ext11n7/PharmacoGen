@@ -32,6 +32,20 @@ mcp = MCPServer(
 
 
 @mcp.tool()
+def search_faers_tool(drug: DrugName) -> dict:
+    """Найти сообщения FAERS по препарату."""
+    from data_sources import FaersClient
+    return FaersClient().search_drug(drug)
+
+
+@mcp.tool()
+def search_clinvar_tool(gene: GeneSymbol, drug: DrugName, variant: OptionalText = "") -> dict:
+    """Найти записи ClinVar по гену, препарату и необязательному варианту."""
+    from data_sources import ClinVarClient
+    return ClinVarClient().search_gene(gene, drug=drug, variant=variant or None)
+
+
+@mcp.tool()
 def synthesize_evidence_tool(
     drug: DrugName,
     gene: GeneSymbol,
