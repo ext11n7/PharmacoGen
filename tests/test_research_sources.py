@@ -54,6 +54,24 @@ def test_model_returns_valid_cited_review(monkeypatch):
     assert research_summary.create_summary(report, dossier)["status"] == "ok"
 
 
+def test_local_model_is_discovered_and_called_without_an_api_key(monkeypatch):
+    for name in ("OPENAI_API_KEY", "PHARMACOGEN_LLM_MODEL", "PHARMACOGEN_LLM_PROVIDER"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(research_summary.requests, "get", lambda *args, **kwargs: FakeResponse({"models": [{"name": "qwen2.5:7b"}]}))
+    output = {"sections": [{"title": "Обзор", "paragraphs": [{"text": "Авторы изучали препарат.", "source_ids": ["PMID:1"]}]}]}
+    calls = []
+    def post(url, **kwargs):
+        calls.append((url, kwargs))
+        return FakeResponse({"message": {"content": json.dumps(output)}})
+    monkeypatch.setattr(research_summary.requests, "post", post)
+    report = {"query": {"drug": "warfarin", "gene": "CYP2C9"}}
+    dossier = {"literature": {"details": {"records": [{"pmid": "1", "abstract": "Abstract"}]}}}
+    result = research_summary.create_summary(report, dossier)
+    assert result["status"] == "ok" and result["provider"] == "ollama"
+    assert calls[0][0] == "http://127.0.0.1:11434/api/chat"
+    assert calls[0][1]["json"]["model"] == "qwen2.5:7b"
+
+
 def test_clinpgx_keeps_pair_context_and_filters_unrelated_records(monkeypatch):
     monkeypatch.setattr(research_sources.requests, "get", lambda *args, **kwargs: FakeResponse({"status": "success", "data": [
         {"accessionId": "PA123", "name": "CYP2C9 and warfarin", "relatedChemicals": [{"name": "warfarin"}], "location": {"genes": [{"symbol": "CYP2C9"}], "displayName": "CYP2C9*2"}, "allelePhenotypes": [{"allele": "*2", "phenotype": "Source text"}]},
