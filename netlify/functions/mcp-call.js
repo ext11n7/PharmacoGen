@@ -3,27 +3,29 @@ const { Server } = require('@modelcontextprotocol/sdk/server/index.js');
 const { InMemoryTransport } = require('@modelcontextprotocol/sdk/inMemory.js');
 const { ListToolsRequestSchema, CallToolRequestSchema } = require('@modelcontextprotocol/sdk/types.js');
 const { searchLiterature } = require('./mcp-dossier');
+const { analyze } = require('./evidence-tools');
 
-const tools = [{ name: 'search_pharmacogenetic_literature_tool', description: 'Поиск публикаций PubMed по препарату, гену и варианту', inputSchema: { type: 'object', properties: { drug: { type: 'string', minLength: 2, maxLength: 120 }, gene: { type: 'string', minLength: 2, maxLength: 40 }, variant: { type: 'string', maxLength: 120 } }, required: ['drug', 'gene'] } }];
+const tools = [{ name: 'search_pharmacogenetic_literature_tool', description: 'Поиск публикаций PubMed по препарату, гену и варианту', inputSchema: { type: 'object', properties: { drug: { type: 'string', minLength: 2, maxLength: 120 }, gene: { type: 'string', minLength: 2, maxLength: 40 }, variant: { type: 'string', maxLength: 120 } }, required: ['drug', 'gene'] } }, ...[['audit_research_tool', 'Проверка полноты досье'], ['match_variant_tool', 'Сопоставление обозначения варианта'], ['plan_review_tool', 'План дальнейшей проверки']].map(([name, description]) => ({ name, description, inputSchema: { type: 'object', properties: { report: { type: 'object' }, dossier: { type: 'object' } }, required: ['report', 'dossier'] } }))];
 
 exports.handler = async (event) => {
   const send = (statusCode, value) => ({ statusCode, headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }, body: JSON.stringify(value) });
   if (event.httpMethod !== 'POST') return send(405, { error: 'Используйте POST' });
-  if ((event.body || '').length > 10000) return send(400, { error: 'Слишком большой запрос' });
+  if ((event.body || '').length > 200000) return send(400, { error: 'Слишком большой запрос' });
   let input;
   try { input = JSON.parse(event.body || '{}'); } catch { return send(400, { error: 'Неверный формат запроса' }); }
   if (input.source !== 'cloud') return send(503, { error: 'Этот транспорт доступен только локально. Выберите MCP на Netlify.' });
   const isCheck = !input.tool;
-  if (!isCheck && input.tool !== tools[0].name) return send(400, { error: 'В этом подключении доступен поиск публикаций PubMed.' });
+  if (!isCheck && !tools.some(tool => tool.name === input.tool)) return send(400, { error: 'Инструмент не найден.' });
   const args = input.arguments || {};
-  if (!isCheck && (typeof args.drug !== 'string' || args.drug.trim().length < 2 || args.drug.length > 120 || typeof args.gene !== 'string' || args.gene.trim().length < 2 || args.gene.length > 40 || (args.variant != null && (typeof args.variant !== 'string' || args.variant.length > 120)))) return send(400, { error: 'Укажите препарат и ген (не менее двух символов).' });
+  if (!isCheck && input.tool === tools[0].name && (typeof args.drug !== 'string' || args.drug.trim().length < 2 || args.drug.length > 120 || typeof args.gene !== 'string' || args.gene.trim().length < 2 || args.gene.length > 40 || (args.variant != null && (typeof args.variant !== 'string' || args.variant.length > 120)))) return send(400, { error: 'Укажите препарат и ген (не менее двух символов).' });
+  if (!isCheck && input.tool !== tools[0].name && (!args.report || !args.dossier || typeof args.report !== 'object' || typeof args.dossier !== 'object')) return send(400, { error: 'Сначала завершите исследование.' });
   const trace = [];
   const server = new Server({ name: 'pharmacogen-netlify', version: '1.0.0' }, { capabilities: { tools: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
   server.setRequestHandler(CallToolRequestSchema, async request => {
-    if (request.params.name !== tools[0].name) throw new Error('Инструмент не найден');
+    if (!tools.some(tool => tool.name === request.params.name)) throw new Error('Инструмент не найден');
     const a = request.params.arguments;
-    const result = await searchLiterature(a.drug.trim(), a.gene.trim(), (a.variant || '').trim(), 5);
+    const result = request.params.name === tools[0].name ? await searchLiterature(a.drug.trim(), a.gene.trim(), (a.variant || '').trim(), 5) : analyze(request.params.name, a);
     return { content: [{ type: 'text', text: JSON.stringify(result) }], structuredContent: result };
   });
   const client = new Client({ name: 'pharmacogen-client', version: '1.0.0' });
