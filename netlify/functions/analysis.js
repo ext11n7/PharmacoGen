@@ -17,9 +17,9 @@ exports.handler = async (event) => {
   let payload;
   try { payload = JSON.parse(event.body || '{}'); } catch { return send(400, { error: 'Неверный формат запроса' }); }
   if (!payload.report || !payload.dossier || typeof payload.report !== 'object' || typeof payload.dossier !== 'object') return send(400, { error: 'Сначала соберите исследование' });
-  const groqKey = (process.env.GROQ_API_KEY || '').trim();
+  const groqKey = (process.env.GROQ_API_KEY || process.env.groq || '').trim();
   const geminiKey = groqKey ? '' : (process.env.GEMINI_API_KEY || '').trim();
-  const key = groqKey || geminiKey || (process.env.OPENAI_API_KEY || '').trim(), model = (process.env.PHARMACOGEN_LLM_MODEL || (groqKey ? 'llama-3.3-70b-versatile' : geminiKey ? 'gemini-2.5-flash' : '')).trim();
+  const key = groqKey || geminiKey || (process.env.OPENAI_API_KEY || '').trim(), model = (process.env.PHARMACOGEN_LLM_MODEL || (groqKey ? 'qwen/qwen3.8-27b' : geminiKey ? 'gemini-2.5-flash' : '')).trim();
   if (!key || !model) return send(200, { status: 'not_configured', message: 'Для автоматического обзора необходимо настроить серверный ключ и модель. Аннотации и рекомендации доступны ниже.' });
   const evidence = prepare(payload.report, payload.dossier);
   if (!evidence.articles.length) return send(200, { status: 'insufficient', message: 'Нет доступных аннотаций для обзора. Попробуйте повторить поиск.' });

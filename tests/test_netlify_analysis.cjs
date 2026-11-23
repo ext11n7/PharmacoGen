@@ -45,7 +45,7 @@ test('Groq is selected when its key is configured', async () => {
   global.fetch = async (url, options) => {
     assert.equal(url, 'https://api.groq.com/openai/v1/chat/completions');
     assert.equal(options.headers.Authorization, 'Bearer test-groq');
-    assert.equal(JSON.parse(options.body).model, 'llama-3.3-70b-versatile');
+    assert.equal(JSON.parse(options.body).model, 'qwen/qwen3.8-27b');
     return { ok: true, json: async () => ({ choices: [{ message: { content: JSON.stringify({ sections: [{ title: 'Обзор', paragraphs: [{ text: 'Текст', source_ids: ['PMID:1'] }] }] }) } }] }) };
   };
   assert.equal(JSON.parse((await analysis.handler(event)).body).status, 'ok');
