@@ -104,6 +104,7 @@ exports.handler = async function handler(event) {
     headers: { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' },
     body: JSON.stringify({
       sources: [
+        { id: 'cloud', title: 'MCP на Netlify', description: 'Клиент и сервер MCP в одной функции; внутренний транспорт. Инструмент ищет публикации PubMed.' },
         { id: 'stdio', title: 'Аналитический режим', description: 'На Netlify запрос выполняется серверной функцией поверх данных текущего отчёта.' },
         { id: 'network', title: 'Серверный режим', description: 'Тот же набор аналитических инструментов доступен через публичную функцию.' },
         { id: 'external', title: 'Внешний medical-mcp', description: 'Внешний источник требует отдельного URL или ключа и не включён в публичный демо-деплой.' },
