@@ -24,3 +24,17 @@ test('model output with an available citation is returned', async () => {
   const response = await analysis.handler(event);
   assert.equal(JSON.parse(response.body).status, 'ok');
 });
+
+test('Gemini uses server-side key and accepts a cited response', async () => {
+  process.env.GEMINI_API_KEY = 'test-gemini';
+  delete process.env.PHARMACOGEN_LLM_MODEL;
+  global.fetch = async (url, options) => {
+    assert.match(url, /generativelanguage\.googleapis\.com/);
+    assert.equal(options.headers['x-goog-api-key'], 'test-gemini');
+    return { ok: true, json: async () => ({ candidates: [{ content: { parts: [{ text: JSON.stringify({ sections: [{ title: 'Обзор', paragraphs: [{ text: 'Текст', source_ids: ['PMID:1'] }] }] }) }] } }] }) };
+  };
+  const result = JSON.parse((await analysis.handler(event)).body);
+  assert.equal(result.status, 'ok');
+  assert.equal(result.model, 'gemini-2.5-flash');
+  delete process.env.GEMINI_API_KEY;
+});
