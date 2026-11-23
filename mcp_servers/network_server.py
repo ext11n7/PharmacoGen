@@ -171,10 +171,24 @@ def list_pharmacogenetic_tools_tool() -> list[dict]:
     return list_pharmacogenetic_tools()
 
 
+from .clinical_tools import register_clinical_tools
+register_clinical_tools(mcp, extended=True)
+
+
 def main() -> None:
     port = int(os.environ.get("PHARMACOGEN_MCP_PORT", "8000"))
     host = os.environ.get("PHARMACOGEN_MCP_HOST", "127.0.0.1")
-    mcp.run(transport="streamable-http", host=host, port=port, streamable_http_path="/mcp")
+    import uvicorn
+    from contextlib import asynccontextmanager
+    from starlette.applications import Starlette
+    http_app = mcp.streamable_http_app(streamable_http_path='/mcp', host=host)
+    sse_app = mcp.sse_app(sse_path='/sse', message_path='/messages/', host=host)
+    @asynccontextmanager
+    async def lifespan(app):
+        async with http_app.router.lifespan_context(http_app):
+            yield
+    app = Starlette(routes=[*sse_app.routes, *http_app.routes], lifespan=lifespan)
+    uvicorn.run(app, host=host, port=port, log_level='warning')
 
 
 if __name__ == "__main__":

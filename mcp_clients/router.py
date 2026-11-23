@@ -15,6 +15,7 @@ import subprocess
 import sys
 import threading
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
@@ -23,7 +24,7 @@ from mcp.client.stdio import StdioServerParameters
 
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCAL_HTTP_URL = os.environ.get("PHARMACOGEN_LOCAL_MCP_URL", "http://127.0.0.1:8000/mcp")
+LOCAL_HTTP_URL = os.environ.get("PHARMACOGEN_LOCAL_MCP_URL", "http://127.0.0.1:8000/sse")
 EXTERNAL_HTTP_URL = os.environ.get("PHARMACOGEN_EXTERNAL_MCP_URL", "").strip()
 _network_process: subprocess.Popen[bytes] | None = None
 _process_lock = threading.Lock()
@@ -38,6 +39,78 @@ class MCPClientError(RuntimeError):
 
 class MCPValidationError(MCPClientError):
     """A tool rejected its arguments before doing any work."""
+
+
+def sanitize_arguments(arguments: dict, schema: dict) -> tuple[dict, list[str]]:
+    """Convert explicit form values, never invent missing patient measurements."""
+    cleaned, changes = dict(arguments), []
+    for name, field in schema.get('properties', {}).items():
+        if name not in cleaned:
+            if name not in schema.get('required', []) and 'default' in field:
+                cleaned[name] = field['default']
+            continue
+        value = cleaned[name]
+        if isinstance(value, str) and field.get('type') in {'integer', 'number'}:
+            try:
+                number = float(value.strip().replace(',', '.'))
+                if field['type'] == 'integer' and not number.is_integer():
+                    raise ValueError('not integer')
+                cleaned[name] = int(number) if field['type'] == 'integer' else number
+                changes.append(f'{name}: числовая строка приведена к числу')
+            except (ValueError, OverflowError):
+                raise MCPValidationError(f'Поле {_field_label(name)} должно быть числом')
+        elif isinstance(value, str) and field.get('type') == 'boolean' and value.lower() in {'true', 'false'}:
+            cleaned[name] = value.lower() == 'true'
+            changes.append(f'{name}: приведено к логическому значению')
+    return cleaned, changes
+
+
+class RecordedStream:
+    def __init__(self, stream, trace, direction):
+        self.stream, self.trace, self.direction = stream, trace, direction
+
+    def __getattr__(self, name):
+        return getattr(self.stream, name)
+
+    def record(self, value):
+        message = getattr(value, 'message', None)
+        if message is not None:
+            self.trace.append({'direction': self.direction, 'packet': message.model_dump(mode='json', exclude_none=True)})
+
+    async def send(self, value):
+        self.record(value)
+        await self.stream.send(value)
+
+    async def receive(self):
+        value = await self.stream.receive()
+        self.record(value)
+        return value
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        import anyio
+        try:
+            return await self.receive()
+        except anyio.EndOfStream:
+            raise StopAsyncIteration
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *args):
+        return None
+
+
+@asynccontextmanager
+async def recorded_transport(server, trace):
+    from mcp.client.stdio import stdio_client
+    from mcp.client.sse import sse_client
+    from mcp.client.streamable_http import streamable_http_client
+    transport = stdio_client(server) if isinstance(server, StdioServerParameters) else sse_client(server) if str(server).rstrip('/').endswith('/sse') else streamable_http_client(server)
+    async with transport as streams:
+        yield RecordedStream(streams[0], trace, 'response'), RecordedStream(streams[1], trace, 'request')
 
 
 def _jsonable(value: Any) -> Any:
@@ -127,12 +200,20 @@ def _source_server(source: str) -> Any:
     if source == "external":
         if EXTERNAL_HTTP_URL:
             return EXTERNAL_HTTP_URL
+        # Glama lists this public Streamable HTTP medical endpoint alongside
+        # the medical-mcp package. It is used only when explicitly enabled.
+        glama_url = os.environ.get('PHARMACOGEN_GLAMA_MCP_URL', '').strip()
+        if glama_url:
+            return glama_url
         external_command = os.environ.get("PHARMACOGEN_EXTERNAL_MCP_COMMAND", "").strip()
         if external_command:
             parts = shlex.split(external_command)
             if not parts:
                 raise MCPClientError("PHARMACOGEN_EXTERNAL_MCP_COMMAND пуст.")
             return StdioServerParameters(command=parts[0], args=parts[1:])
+        installed = ROOT / 'node_modules' / 'medical-mcp' / 'build' / 'index.js'
+        if installed.is_file():
+            return StdioServerParameters(command=shutil_which('node') or 'node', args=['-e', 'console.log=console.error; import(require("url").pathToFileURL(process.argv[1]))', str(installed)], cwd=str(ROOT))
         if not shutil_which("npx"):
             raise MCPClientError("Для внешнего режима нужен npx или PHARMACOGEN_EXTERNAL_MCP_URL.")
         # The published package exposes an ESM entrypoint without a portable
@@ -165,14 +246,10 @@ async def _invoke_once(source: str, tool_name: str, arguments: dict[str, Any]) -
     client_mode = "legacy" if source == "external" else "auto"
     failure: MCPClientError | None = None
     response_payload: dict[str, Any] | None = None
-    async with Client(server, read_timeout_seconds=40, mode=client_mode) as client:
+    async with Client(recorded_transport(server, trace), read_timeout_seconds=12 if source == 'external' else 40, mode='legacy') as client:
         request_id = 1
-        _trace_request(trace, request_id, "initialize", {"protocolVersion": "2025-11-25", "capabilities": {}, "clientInfo": {"name": "PharmacoGen", "version": "2.0.0"}})
-        _trace_response(trace, request_id, {"protocolVersion": client.protocol_version or "2025-11-25", "serverInfo": _jsonable(client.server_info), "capabilities": _jsonable(client.server_capabilities)})
         request_id += 1
         tools_result = await client.list_tools()
-        _trace_request(trace, request_id, "tools/list", {})
-        _trace_response(trace, request_id, tools_result)
         tools = list(getattr(tools_result, "tools", []) or [])
         selected = next((tool for tool in tools if _tool_name(tool) == tool_name), None)
         if selected is None:
@@ -180,13 +257,13 @@ async def _invoke_once(source: str, tool_name: str, arguments: dict[str, Any]) -
             failure = MCPClientError(f"Инструмент {tool_name} не найден. Доступны: {available}")
         else:
             schema = _tool_schema(selected)
+            arguments, adjustments = sanitize_arguments(arguments, schema)
             missing = [name for name in schema.get("required", []) if arguments.get(name) is None or str(arguments.get(name, "")).strip() == ""]
             if missing:
                 _trace_error(trace, request_id, f"Заполните: {', '.join(_field_label(name) for name in missing)}")
                 failure = MCPValidationError(f"Заполните: {', '.join(_field_label(name) for name in missing)}")
             else:
                 request_id += 1
-                _trace_request(trace, request_id, "tools/call", {"name": tool_name, "arguments": arguments})
                 try:
                     result = await client.call_tool(tool_name, arguments)
                 except ValueError as exc:
@@ -202,13 +279,14 @@ async def _invoke_once(source: str, tool_name: str, arguments: dict[str, Any]) -
                         else:
                             failure = MCPClientError(raw_message or "Инструмент отклонил параметры.")
                     else:
-                        _trace_response(trace, request_id, result)
                         response_payload = {
                             "source": source,
                             "tool": {"name": _tool_name(selected), "description": getattr(selected, "description", ""), "inputSchema": schema},
                             "result": _jsonable(result),
                             "trace": trace,
                             "server": _jsonable(client.server_info),
+                            "adjustments": adjustments,
+                            "transport": 'stdio' if isinstance(server, StdioServerParameters) else 'sse' if str(server).rstrip('/').endswith('/sse') else 'streamable-http',
                         }
     if failure:
         raise failure
@@ -247,9 +325,9 @@ async def _invoke_with_retry(source: str, tool_name: str, arguments: dict[str, A
             result["cache_hit"] = True
             return result
     last_error: Exception | None = None
-    for attempt in range(2):
+    for attempt in range(1 if source == 'external' else 2):
         try:
-            result = await asyncio.wait_for(_invoke_once(source, tool_name, arguments), timeout=50)
+            result = await asyncio.wait_for(_invoke_once(source, tool_name, arguments), timeout=15 if source == 'external' else 50)
             result["cache_hit"] = False
             if _cacheable_response(result):
                 with _cache_lock:
@@ -271,9 +349,10 @@ def call_mcp_tool(source: str, tool_name: str, arguments: dict[str, Any]) -> dic
 
 async def _check_connection(source: str) -> dict[str, Any]:
     server = _source_server(source)
-    async with Client(server, read_timeout_seconds=12, mode="legacy" if source == "external" else "auto") as client:
+    trace = []
+    async with Client(recorded_transport(server, trace), read_timeout_seconds=12, mode='legacy') as client:
         result = await client.list_tools()
-        return {"source": source, "server": _jsonable(client.server_info), "tools": [{"name": _tool_name(tool), "description": str(getattr(tool, "description", "") or "")} for tool in result.tools]}
+        return {"source": source, "server": _jsonable(client.server_info), "tools": [{"name": _tool_name(tool), "description": str(getattr(tool, "description", "") or ""), 'inputSchema': _tool_schema(tool)} for tool in result.tools], 'trace': trace, 'external_connection': 'remote' if source == 'external' and isinstance(server, str) else 'vendor-package' if source == 'external' else None}
 
 
 def check_mcp_connection(source: str) -> dict[str, Any]:

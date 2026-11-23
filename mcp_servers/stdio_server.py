@@ -170,6 +170,10 @@ def list_pharmacogenetic_tools_tool() -> list[dict]:
     return list_pharmacogenetic_tools()
 
 
+from .clinical_tools import register_clinical_tools
+register_clinical_tools(mcp, extended=False)
+
+
 def main() -> None:
     mcp.run(transport="stdio")
 

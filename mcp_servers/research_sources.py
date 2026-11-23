@@ -36,6 +36,27 @@ def enrich_pubmed_records(records: list[dict[str, Any]]) -> list[dict[str, Any]]
     except (requests.RequestException, ValueError, TypeError, AttributeError):
         for record in records:
             record["abstract_unavailable"] = True
+    missing = [item for item in records if not item.get('abstract')]
+    if missing:
+        try:
+            import xml.etree.ElementTree as ET
+            response = requests.get('https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi', params={'db': 'pubmed', 'id': ','.join(str(x['pmid']) for x in missing), 'retmode': 'xml'}, timeout=10)
+            response.raise_for_status()
+            # This API response is bounded before XML parsing; external entities are not resolved by ElementTree.
+            if len(response.content) > 2_000_000:
+                raise ValueError('Response too large')
+            root = ET.fromstring(response.content)
+            by_id = {row.findtext('MedlineCitation/PMID'): row for row in root.findall('PubmedArticle')}
+            for record in missing:
+                row = by_id.get(str(record['pmid']))
+                if row is None:
+                    continue
+                record['abstract'] = '\n'.join(''.join(x.itertext()) for x in row.findall('MedlineCitation/Article/Abstract/AbstractText'))
+                record['publication_types'] = [''.join(x.itertext()) for x in row.findall('MedlineCitation/Article/PublicationTypeList/PublicationType')]
+                record['abstract_source'] = 'PubMed / NCBI efetch'
+                record['abstract_unavailable'] = not bool(record['abstract'])
+        except (requests.RequestException, ValueError, AttributeError, ET.ParseError):
+            pass
     return records
 
 
